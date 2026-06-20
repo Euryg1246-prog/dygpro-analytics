@@ -137,14 +137,27 @@ export default function BreakoutPage() {
 
   // ── Pre-sesión: pantalla de countdown ──
   if (!inSession) {
+    // Usar hora NY para detectar fin de semana correctamente
+    const nyDowStr = now.toLocaleString('en-US', { timeZone: 'America/New_York', weekday: 'short' })
+    const isWeekend = nyDowStr === 'Sat' || nyDowStr === 'Sun'
+
+    // Minutos hasta próximo open (Lun-Vie 9:30 AM NY)
     let minsLeft: number
-    const isWeekend = [0, 6].includes(now.getDay()) // Dom=0, Sáb=6
-    if (nyMin < SESSION_START) {
+    if (isWeekend) {
+      const nyDow = nyDowStr === 'Sun' ? 0 : 6
+      const daysUntilMon = nyDow === 0 ? 1 : 2
+      minsLeft = daysUntilMon * 24 * 60 - nyMin + SESSION_START
+    } else if (nyMin < SESSION_START) {
       minsLeft = SESSION_START - nyMin
     } else {
-      minsLeft = SESSION_START + 24 * 60 - nyMin
+      // Después del close — próximo open es mañana
+      // Pero si es Vie después del close → próximo es Lun
+      const nyDowStr2 = now.toLocaleString('en-US', { timeZone: 'America/New_York', weekday: 'short' })
+      const extraDays = nyDowStr2 === 'Fri' ? 3 : 1
+      minsLeft = extraDays * 24 * 60 - nyMin + SESSION_START
     }
-    const hLeft = Math.floor(minsLeft / 60)
+    const dLeft = Math.floor(minsLeft / (60 * 24))
+    const hLeft = Math.floor((minsLeft % (60 * 24)) / 60)
     const mLeft = minsLeft % 60
 
     return (
@@ -152,21 +165,15 @@ export default function BreakoutPage() {
         <div className="flex flex-col items-center justify-center min-h-[70vh] gap-6 text-center">
           <p className="text-6xl">⏳</p>
           <div>
-            <p className="text-2xl font-black text-zinc-200">
-              {isWeekend ? 'No hay sesión hoy' : 'Sesión cerrada'}
-            </p>
-            <p className="text-zinc-500 mt-1">Breakout v4 · 9:30 AM – 3:30 PM NY</p>
+            <p className="text-2xl font-black text-zinc-200">No hay sesión</p>
+            <p className="text-zinc-500 mt-1">Breakout v4 · Lun–Vie 9:30 AM – 3:30 PM NY</p>
           </div>
-          {!isWeekend && (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-10 py-6">
-              <p className="text-5xl font-mono font-black text-blue-400">
-                {hLeft}h {String(mLeft).padStart(2, '0')}m
-              </p>
-              <p className="text-xs text-zinc-500 mt-2">
-                {nyMin < SESSION_START ? 'para el open' : 'para el próximo open'}
-              </p>
-            </div>
-          )}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-10 py-6">
+            <p className="text-5xl font-mono font-black text-blue-400">
+              {dLeft > 0 ? `${dLeft}d ` : ''}{hLeft}h {String(mLeft).padStart(2, '0')}m
+            </p>
+            <p className="text-xs text-zinc-500 mt-2">para el próximo open</p>
+          </div>
           <p className="text-xs text-zinc-600 max-w-xs">
             Regresa a las 9:30 AM NY. Ten el chart de NQ en 1 min listo con EMA 50 en 1H.
           </p>

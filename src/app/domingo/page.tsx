@@ -17,6 +17,40 @@ function toHourLabel(h: number) {
   return h === 0 ? '12AM' : h < 12 ? `${h}AM` : h === 12 ? '12PM' : `${h - 12}PM`
 }
 
+function getNYTime(now: Date) {
+  const str = now.toLocaleString('en-US', { timeZone: 'America/New_York', hour12: false })
+  const [, timePart] = str.split(', ')
+  const parts = timePart.split(':').map(Number)
+  const h = parts[0] === 24 ? 0 : parts[0]
+  const m = parts[1]
+  const dow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' })).getDay()
+  return { h, m, totalMin: h * 60 + m, dow }
+}
+
+// SE activa: Dom>=18h, Lun<16:15 o >=18h, Mar<16:15 o >=18h, Mié<16:15
+const SE_OPEN_MIN  = 18 * 60        // 1080
+const SE_CLOSE_MIN = 16 * 60 + 15  // 975
+
+function isSEActive(totalMin: number, dow: number): boolean {
+  const afterOpen  = totalMin >= SE_OPEN_MIN
+  const beforeClose = totalMin < SE_CLOSE_MIN
+  if (dow === 0) return afterOpen          // Dom → solo desde 18h
+  if (dow === 1 || dow === 2) return afterOpen || beforeClose // Lun/Mar
+  if (dow === 3) return beforeClose        // Mié → solo hasta 16:15
+  return false                             // Jue/Vie/Sáb → nunca
+}
+
+// Minutos hasta el próximo open (Dom 18:00 o mismo día si ya pasó el close)
+function minsToNextSEOpen(totalMin: number, dow: number): number {
+  // Si hoy es un día de apertura (Dom/Lun/Mar) y aún no son las 18h
+  if ((dow === 0 || dow === 1 || dow === 2) && totalMin < SE_OPEN_MIN) {
+    return SE_OPEN_MIN - totalMin
+  }
+  // Calcular días hasta el próximo Domingo
+  const daysUntilSun = (7 - dow) % 7 || 7
+  return daysUntilSun * 24 * 60 - totalMin + SE_OPEN_MIN
+}
+
 const HOUR_ORDER = [
   '12AM','1AM','2AM','3AM','4AM','5AM','6AM','7AM','8AM','9AM','10AM','11AM',
   '12PM','1PM','2PM','3PM','4PM','5PM','6PM','7PM','8PM','9PM','10PM','11PM',
@@ -106,35 +140,38 @@ export default function EnVivoPage() {
     </div>
   )
 
-  // ── Pantalla pre-mercado: domingo antes de las 6PM ──
-  const isSunday  = now.getDay() === 0
-  const isTuesday = now.getDay() === 2
-  const hour      = now.getHours()
-  const minutes   = now.getMinutes()
+  // ── Detección de sesión SE (hora NY) ──
+  const { h: nyH, m: nyM, totalMin: nyMin, dow: nyDow } = getNYTime(now)
+  const seActive = isSEActive(nyMin, nyDow)
 
-  if (activeDay === 'Dom' && isSunday && hour < 18) {
-    const minsLeft = (18 - hour - 1) * 60 + (60 - minutes)
-    const hLeft    = Math.floor(minsLeft / 60)
-    const mLeft    = minsLeft % 60
+  if (!seActive) {
+    const minsLeft = minsToNextSEOpen(nyMin, nyDow)
+    const dLeft = Math.floor(minsLeft / (60 * 24))
+    const hLeft = Math.floor((minsLeft % (60 * 24)) / 60)
+    const mLeft = minsLeft % 60
     return (
-      <div className="flex flex-col items-center justify-center min-h-[70vh] gap-6 text-center">
+      <div className="max-w-lg mx-auto flex flex-col items-center justify-center min-h-[70vh] gap-6 text-center">
         <p className="text-6xl">⏳</p>
         <div>
-          <p className="text-2xl font-black text-zinc-200">Aún no es hora</p>
-          <p className="text-zinc-500 mt-1">Mercado abre a las 6:00 PM</p>
+          <p className="text-2xl font-black text-zinc-200">No hay sesión</p>
+          <p className="text-zinc-500 mt-1">Session Edge · Dom/Lun/Mar 6:00 PM – 4:15 PM NY</p>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-10 py-6">
           <p className="text-5xl font-mono font-black text-emerald-400">
-            {hLeft}h {String(mLeft).padStart(2, '0')}m
+            {dLeft > 0 ? `${dLeft}d ` : ''}{hLeft}h {String(mLeft).padStart(2, '0')}m
           </p>
-          <p className="text-xs text-zinc-500 mt-2">para el open</p>
+          <p className="text-xs text-zinc-500 mt-2">para el próximo open</p>
         </div>
         <p className="text-xs text-zinc-600 max-w-xs">
-          Vuelve aquí cuando abra. Ten listo el nivel del open de NQ.
+          Ten listo el nivel del open de NQ cuando abra el mercado.
         </p>
       </div>
     )
   }
+
+  // Variables legacy que usaba el código original
+  const hour    = nyH
+  const minutes = nyM
 
   // ── Cálculos ──
   const daySessions = sessions.filter(s => normDay(s.dia) === activeDay)
