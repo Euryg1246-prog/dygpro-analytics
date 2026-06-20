@@ -145,14 +145,20 @@ function parseCustomCSV(rows: Record<string, string>[], strategy: string): Sessi
     .filter((s): s is Session => s !== null)
 }
 
+const KNOWN_STRATEGIES = ['session_edge', 'breakout_v4', 'open_below_80']
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function ImportarPage() {
   const [preview, setPreview] = useState<Session[]>([])
   const [strategy, setStrategy] = useState('session_edge')
+  const [customStrategy, setCustomStrategy] = useState('')
+  const [showCustom, setShowCustom] = useState(false)
   const [detectedStrategy, setDetectedStrategy] = useState<{ strategy: string; confidence: 'alta' | 'baja' } | null>(null)
   const [isTradingView, setIsTradingView] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
+
+  const activeStrategy = showCustom ? customStrategy.trim() || strategy : strategy
 
   const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -171,7 +177,14 @@ export default function ImportarPage() {
         if (tv) {
           const detected = detectStrategy(rows, file.name)
           setDetectedStrategy(detected)
-          setStrategy(detected.strategy)
+          // Si la estrategia detectada no está en la lista conocida, mostrar campo custom
+          if (!KNOWN_STRATEGIES.includes(detected.strategy)) {
+            setShowCustom(true)
+            setCustomStrategy(detected.strategy)
+          } else {
+            setShowCustom(false)
+            setStrategy(detected.strategy)
+          }
           sessions = parseTradingViewCSV(rows, detected.strategy)
         } else {
           setDetectedStrategy(null)
@@ -185,22 +198,37 @@ export default function ImportarPage() {
   }, [strategy])
 
   const handleStrategyChange = (newStrategy: string) => {
-    setStrategy(newStrategy)
+    if (newStrategy === '__custom__') {
+      setShowCustom(true)
+    } else {
+      setShowCustom(false)
+      setStrategy(newStrategy)
+      if (preview.length > 0) {
+        setPreview(prev => prev.map(s => ({ ...s, strategy: newStrategy })))
+      }
+    }
+  }
+
+  const handleCustomChange = (val: string) => {
+    setCustomStrategy(val)
     if (preview.length > 0) {
-      setPreview(prev => prev.map(s => ({ ...s, strategy: newStrategy })))
+      setPreview(prev => prev.map(s => ({ ...s, strategy: val.trim() || strategy })))
     }
   }
 
   const handleImport = async () => {
     if (preview.length === 0) return
+    if (!activeStrategy) { setStatus('Error: define el nombre de la estrategia'); return }
     setImporting(true)
     setStatus('Importando...')
+    // Asegurar que todos los registros tienen la estrategia correcta
+    const toImport = preview.map(s => ({ ...s, strategy: activeStrategy }))
 
     const batchSize = 100
     let total = 0
 
-    for (let i = 0; i < preview.length; i += batchSize) {
-      const batch = preview.slice(i, i + batchSize)
+    for (let i = 0; i < toImport.length; i += batchSize) {
+      const batch = toImport.slice(i, i + batchSize)
       const res = await fetch('/api/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -252,21 +280,34 @@ export default function ImportarPage() {
             </div>
           )}
 
-          <div className="flex items-end gap-4">
+          <div className="flex items-end gap-3 flex-wrap">
             <div>
               <label className="text-xs text-zinc-500 block mb-1">
-                {isTradingView ? 'Corregir estrategia (opcional)' : 'Estrategia'}
+                {isTradingView ? 'Estrategia (verifica antes de importar)' : 'Estrategia'}
               </label>
               <select
-                value={strategy}
+                value={showCustom ? '__custom__' : strategy}
                 onChange={e => handleStrategyChange(e.target.value)}
                 className="bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm"
               >
                 <option value="session_edge">NQ Session Edge</option>
                 <option value="breakout_v4">Breakout Long v4</option>
                 <option value="open_below_80">Open Below 80%</option>
+                <option value="__custom__">+ Nueva estrategia…</option>
               </select>
             </div>
+            {showCustom && (
+              <div>
+                <label className="text-xs text-zinc-500 block mb-1">Nombre de la estrategia</label>
+                <input
+                  type="text"
+                  value={customStrategy}
+                  onChange={e => handleCustomChange(e.target.value)}
+                  placeholder="ej: reversal_v1"
+                  className="bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm w-52"
+                />
+              </div>
+            )}
           </div>
 
           {status && (
@@ -281,7 +322,7 @@ export default function ImportarPage() {
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-lg">
-              Preview — {STRATEGY_LABELS[strategy] || strategy} ({preview.length} trades)
+              Preview — {STRATEGY_LABELS[activeStrategy] || activeStrategy} ({preview.length} trades)
             </CardTitle>
             <Button onClick={handleImport} disabled={importing} className="bg-emerald-600 hover:bg-emerald-700">
               {importing ? 'Importando...' : 'Confirmar Importar'}
