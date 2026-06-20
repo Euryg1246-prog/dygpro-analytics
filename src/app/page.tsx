@@ -210,9 +210,26 @@ export default function Dashboard() {
   const hourStats   = calcHourStats(filtered)
   const pullbackSim = calcPullbackSim(filtered)
 
-  const cumData = filtered.map((s, i) => ({
+  // Equity curve — filtrable por día
+  const [equityDay, setEquityDay] = useState<string>('Todos')
+
+  const EQUITY_DAYS = ['Todos', 'Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+
+  const normalize = (d: string) => {
+    const map: Record<string, string> = {
+      'Sun':'Dom','Mon':'Lun','Tue':'Mar','Wed':'Mié','Thu':'Jue','Fri':'Vie','Sat':'Sáb',
+      'Domingo':'Dom','Lunes':'Lun','Martes':'Mar',
+    }
+    return map[d] ?? d
+  }
+
+  const equityFiltered = equityDay === 'Todos'
+    ? filtered
+    : filtered.filter(s => normalize(s.dia) === equityDay)
+
+  const cumData = equityFiltered.map((s, i) => ({
     fecha: s.fecha.slice(5),
-    acumulado: Math.round(filtered.slice(0, i + 1).reduce((sum, ss) => sum + (ss.cierre ?? 0), 0)),
+    acumulado: Math.round(equityFiltered.slice(0, i + 1).reduce((sum, ss) => sum + (ss.cierre ?? 0), 0)),
   }))
 
   // P&L por fecha individual
@@ -321,7 +338,31 @@ export default function Dashboard() {
 
       {/* Equity Curve */}
       <Card className="bg-zinc-900 border-zinc-800">
-        <CardHeader><CardTitle>Equity Curve — P&L Acumulado</CardTitle></CardHeader>
+        <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle>Equity Curve — P&L Acumulado</CardTitle>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                {equityDay === 'Todos' ? 'Todos los días' : `Solo ${equityDay}`} · {equityFiltered.length} sesiones
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {EQUITY_DAYS.map(d => (
+                <button
+                  key={d}
+                  onClick={() => setEquityDay(d)}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                    equityDay === d
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
+                  }`}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+          </div>
+        </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={cumData}>
