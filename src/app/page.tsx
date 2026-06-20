@@ -6,7 +6,7 @@ import { Session } from '@/lib/types'
 import {
   calcKPIs, calcDayStats, calcPeakDistribution,
   calcStreaks, calcMaeMfe, calcHourStats,
-  calcWeeklyPnl, calcTodayPnl,
+  calcWeeklyPnl, calcTodayPnl, calcPullbackSim,
 } from '@/lib/calc'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -163,12 +163,13 @@ export default function Dashboard() {
     </div>
   )
 
-  const kpis     = calcKPIs(sessions)
-  const dayStats = calcDayStats(sessions)
-  const peakDist = calcPeakDistribution(sessions)
-  const streaks  = calcStreaks(sessions)
-  const maeMfe   = calcMaeMfe(sessions)
-  const hourStats = calcHourStats(sessions)
+  const kpis        = calcKPIs(sessions)
+  const dayStats    = calcDayStats(sessions)
+  const peakDist    = calcPeakDistribution(sessions)
+  const streaks     = calcStreaks(sessions)
+  const maeMfe      = calcMaeMfe(sessions)
+  const hourStats   = calcHourStats(sessions)
+  const pullbackSim = calcPullbackSim(sessions)
 
   const cumData = sessions.map((s, i) => ({
     fecha: s.fecha.slice(5),
@@ -370,6 +371,84 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Simulación Entrada en Pullback */}
+      {pullbackSim.totalWithPullback > 0 && (
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardHeader>
+            <CardTitle>Simulación — ¿Qué pasa si entras en el retroceso?</CardTitle>
+            <p className="text-xs text-zinc-500 mt-1">
+              {pullbackSim.totalWithPullback} trades tuvieron retroceso antes de cerrar.
+              Simulación: entrar en el punto más bajo (MAE) en vez de la apertura.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="bg-zinc-800/60 rounded-lg p-3 text-center">
+                <p className="text-xs text-zinc-500 mb-1">Se recuperaron</p>
+                <p className="text-2xl font-bold text-emerald-400">{pullbackSim.recoveryRate}%</p>
+                <p className="text-xs text-zinc-600">{pullbackSim.recoveredCount} de {pullbackSim.totalWithPullback}</p>
+              </div>
+              <div className="bg-zinc-800/60 rounded-lg p-3 text-center">
+                <p className="text-xs text-zinc-500 mb-1">Profundidad avg</p>
+                <p className="text-2xl font-bold text-red-400">-{pullbackSim.avgPullbackDepth}</p>
+                <p className="text-xs text-zinc-600">retroceso en $</p>
+              </div>
+              <div className="bg-zinc-800/60 rounded-lg p-3 text-center">
+                <p className="text-xs text-zinc-500 mb-1">Win rate simulado</p>
+                <p className={`text-2xl font-bold ${pullbackSim.simWinRate >= 60 ? 'text-emerald-400' : pullbackSim.simWinRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {pullbackSim.simWinRate}%
+                </p>
+                <p className="text-xs text-zinc-600">vs {Math.round((pullbackSim.recoveredCount / pullbackSim.totalWithPullback) * 100)}% real</p>
+              </div>
+              <div className="bg-zinc-800/60 rounded-lg p-3 text-center">
+                <p className="text-xs text-zinc-500 mb-1">Mejora promedio</p>
+                <p className="text-2xl font-bold text-emerald-400">+{pullbackSim.avgImprovement}</p>
+                <p className="text-xs text-zinc-600">$ por trade</p>
+              </div>
+            </div>
+
+            {/* Comparativa real vs simulado */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-zinc-800/40 rounded-lg p-4 text-center border border-zinc-700">
+                <p className="text-xs text-zinc-500 uppercase tracking-wide mb-2">Entrada real (apertura)</p>
+                <p className={`text-3xl font-bold ${pullbackSim.avgRealPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {pullbackSim.avgRealPnl >= 0 ? '+' : ''}{pullbackSim.avgRealPnl}
+                </p>
+                <p className="text-xs text-zinc-500 mt-1">avg / trade</p>
+                <p className={`text-sm mt-2 ${pullbackSim.realTotalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {pullbackSim.realTotalPnl >= 0 ? '+' : ''}{pullbackSim.realTotalPnl.toLocaleString()} total
+                </p>
+              </div>
+
+              <div className="flex items-center justify-center">
+                <div className="text-center">
+                  <p className="text-zinc-500 text-sm">vs</p>
+                  <p className="text-emerald-400 font-bold text-lg mt-1">
+                    +{pullbackSim.avgImprovement}/trade
+                  </p>
+                  <p className="text-xs text-zinc-500">de diferencia</p>
+                </div>
+              </div>
+
+              <div className="bg-emerald-950/40 rounded-lg p-4 text-center border border-emerald-800/40">
+                <p className="text-xs text-zinc-500 uppercase tracking-wide mb-2">Entrada en pullback (MAE)</p>
+                <p className={`text-3xl font-bold ${pullbackSim.avgSimPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {pullbackSim.avgSimPnl >= 0 ? '+' : ''}{pullbackSim.avgSimPnl}
+                </p>
+                <p className="text-xs text-zinc-500 mt-1">avg / trade</p>
+                <p className={`text-sm mt-2 ${pullbackSim.simTotalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {pullbackSim.simTotalPnl >= 0 ? '+' : ''}{pullbackSim.simTotalPnl.toLocaleString()} total
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-600 mt-3 text-center">
+              * Simulación asume que logras entrar exactamente en el MAE. En la práctica el timing es más difícil.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Peak Distribution */}
       <Card className="bg-zinc-900 border-zinc-800">

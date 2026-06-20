@@ -61,3 +61,16 @@ export interface HourStat {
   winRate: number
   totalPnl: number
 }
+
+export interface PullbackSim {
+  totalWithPullback: number      // trades que tuvieron retroceso
+  recoveredCount: number         // retrocesos que cerraron positivos
+  recoveryRate: number           // % recuperados
+  avgRealPnl: number             // P&L promedio real
+  avgSimPnl: number              // P&L promedio si entrabas en el MAE
+  avgImprovement: number         // mejora promedio en $
+  avgPullbackDepth: number       // profundidad promedio del retroceso ($)
+  simWinRate: number             // win rate si entraras en el MAE
+  simTotalPnl: number            // P&L total simulado
+  realTotalPnl: number           // P&L total real (de los trades con pullback)
+}

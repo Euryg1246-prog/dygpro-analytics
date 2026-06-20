@@ -1,4 +1,4 @@
-import { Session, KPIs, DayStats, Streaks, MaeMfeStats, HourStat } from './types'
+import { Session, KPIs, DayStats, Streaks, MaeMfeStats, HourStat, PullbackSim } from './types'
 
 export function calcKPIs(sessions: Session[]): KPIs {
   if (sessions.length === 0) {
@@ -175,6 +175,46 @@ export function calcWeeklyPnl(sessions: Session[]): number {
   return sessions
     .filter(s => s.fecha >= weekStart)
     .reduce((sum, s) => sum + (s.cierre ?? 0), 0)
+}
+
+// ─── Simulación entrada en pullback (MAE) ────────────────────────────────────
+export function calcPullbackSim(sessions: Session[]): PullbackSim {
+  // Solo trades con retroceso real (baja < 0) y cierre conocido
+  const withPullback = sessions.filter(s => s.baja !== null && (s.baja ?? 0) < 0 && s.cierre !== null)
+
+  if (withPullback.length === 0) {
+    return {
+      totalWithPullback: 0, recoveredCount: 0, recoveryRate: 0,
+      avgRealPnl: 0, avgSimPnl: 0, avgImprovement: 0,
+      avgPullbackDepth: 0, simWinRate: 0, simTotalPnl: 0, realTotalPnl: 0,
+    }
+  }
+
+  // Si hubieras entrado en el MAE: simPnl = cierre - baja (baja es negativo, lo resta → suma)
+  const simResults = withPullback.map(s => ({
+    real: s.cierre!,
+    sim: s.cierre! - s.baja!,   // e.g. +300 - (-200) = +500
+    depth: Math.abs(s.baja!),
+  }))
+
+  const recoveredCount = withPullback.filter(s => (s.cierre ?? 0) > 0).length
+  const simWins = simResults.filter(r => r.sim > 0).length
+
+  const realTotalPnl = Math.round(simResults.reduce((a, r) => a + r.real, 0))
+  const simTotalPnl  = Math.round(simResults.reduce((a, r) => a + r.sim, 0))
+
+  return {
+    totalWithPullback: withPullback.length,
+    recoveredCount,
+    recoveryRate: Math.round((recoveredCount / withPullback.length) * 100),
+    avgRealPnl: Math.round(simResults.reduce((a, r) => a + r.real, 0) / simResults.length),
+    avgSimPnl:  Math.round(simResults.reduce((a, r) => a + r.sim, 0)  / simResults.length),
+    avgImprovement: Math.round(simResults.reduce((a, r) => a + r.depth, 0) / simResults.length),
+    avgPullbackDepth: Math.round(simResults.reduce((a, r) => a + r.depth, 0) / simResults.length),
+    simWinRate: Math.round((simWins / simResults.length) * 100),
+    simTotalPnl,
+    realTotalPnl,
+  }
 }
 
 export function calcTodayPnl(sessions: Session[]): number {
