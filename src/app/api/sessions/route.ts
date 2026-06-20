@@ -11,8 +11,9 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('sessions')
     .select('*')
-    .eq('strategy', strategy)
     .order('fecha', { ascending: false })
+
+  if (strategy !== 'all') query = query.eq('strategy', strategy)
 
   if (from) query = query.gte('fecha', from)
   if (to) query = query.lte('fecha', to)

@@ -11,6 +11,7 @@ type SortDir = 'asc' | 'desc'
 export default function SesionesPage() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
+  const [filterStrategy, setFilterStrategy] = useState('all')
   const [filterDay, setFilterDay] = useState('')
   const [filterFrom, setFilterFrom] = useState('')
   const [filterTo, setFilterTo] = useState('')
@@ -18,13 +19,14 @@ export default function SesionesPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
   useEffect(() => {
-    fetch('/api/sessions?strategy=session_edge')
+    setLoading(true)
+    fetch(`/api/sessions?strategy=${filterStrategy}`)
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data)) setSessions(data)
         setLoading(false)
       })
-  }, [])
+  }, [filterStrategy])
 
   const filtered = useMemo(() => {
     let result = [...sessions]
@@ -54,6 +56,7 @@ export default function SesionesPage() {
   const columns: { key: SortKey; label: string; format?: (v: number | string | null) => string; color?: (v: number | null) => string }[] = [
     { key: 'fecha', label: 'Fecha' },
     { key: 'dia', label: 'Día' },
+    { key: 'strategy', label: 'Estrategia', format: v => v === 'breakout_v4' ? 'Breakout v4' : v === 'session_edge' ? 'Session Edge' : String(v ?? '') },
     { key: 'open_price', label: 'Open', format: v => typeof v === 'number' ? v.toFixed(2) : '' },
     { key: 'baja', label: 'Baja', format: v => typeof v === 'number' ? v.toString() : '', color: () => 'text-red-400' },
     { key: 'cierre', label: 'Cierre', format: v => typeof v === 'number' ? (v >= 0 ? '+' + v : v.toString()) : '', color: v => (v ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400' },
@@ -75,6 +78,15 @@ export default function SesionesPage() {
       <h1 className="text-2xl font-bold">Sesiones ({filtered.length})</h1>
 
       <div className="flex gap-4 flex-wrap items-end">
+        <div>
+          <label className="text-xs text-zinc-500 block mb-1">Estrategia</label>
+          <select value={filterStrategy} onChange={e => setFilterStrategy(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm">
+            <option value="all">Todas</option>
+            <option value="session_edge">Session Edge</option>
+            <option value="breakout_v4">Breakout v4</option>
+            <option value="open_below_80">Open Below 80%</option>
+          </select>
+        </div>
         <div>
           <label className="text-xs text-zinc-500 block mb-1">Día</label>
           <select value={filterDay} onChange={e => setFilterDay(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm">
