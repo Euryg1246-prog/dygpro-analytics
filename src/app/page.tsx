@@ -1061,6 +1061,225 @@ export default function Dashboard() {
         )
       })()}
 
+      {/* ── Radiografía Breakout v4 ── */}
+      {strategy === 'breakout_v4' && (() => {
+        // MAE buckets — baja = "Desviación adversa USD" de TradingView (negativo, en USD)
+        // Con 10 MNQ a $2/pt: $500 USD adverse ≈ 25 pts de adversidad
+        const maeBuckets = [
+          { label: '< $100',      min: 0,   max: 100  },
+          { label: '$100–$249',   min: 100, max: 250  },
+          { label: '$250–$499',   min: 250, max: 500  },
+          { label: '$500+',       min: 500, max: null },
+        ].map(b => {
+          const inB = filtered.filter(s => {
+            const mae = Math.abs(s.baja ?? 0)
+            return mae >= b.min && (b.max === null || mae < b.max)
+          })
+          const wins = inB.filter(s => (s.cierre ?? 0) >= 0)
+          const total = inB.reduce((a, s) => a + (s.cierre ?? 0), 0)
+          return {
+            ...b,
+            trades: inB.length,
+            winRate: inB.length > 0 ? Math.round((wins.length / inB.length) * 100) : 0,
+            avgPnl: inB.length > 0 ? Math.round(total / inB.length) : 0,
+          }
+        })
+
+        // Por hora de entrada (hora_baja = hora de ENTRADA en Breakout v4,
+        // mapeada desde "Fecha y hora" de la fila Entrada del CSV TradingView)
+        const hourMap: Record<string, { t: number; w: number; total: number }> = {}
+        for (const s of filtered) {
+          if (!s.hora_baja) continue
+          const h = parseInt(s.hora_baja.split(':')[0])
+          const label = h === 0 ? '12AM' : h < 12 ? `${h}AM` : h === 12 ? '12PM' : `${h - 12}PM`
+          if (!hourMap[label]) hourMap[label] = { t: 0, w: 0, total: 0 }
+          hourMap[label].t++
+          hourMap[label].total += (s.cierre ?? 0)
+          if ((s.cierre ?? 0) >= 0) hourMap[label].w++
+        }
+        const hourOrder = ['12AM','1AM','2AM','3AM','4AM','5AM','6AM','7AM','8AM','9AM','10AM','11AM','12PM','1PM','2PM','3PM','4PM','5PM','6PM','7PM','8PM','9PM','10PM','11PM']
+        const hourStats = hourOrder
+          .filter(h => hourMap[h] && hourMap[h].t >= 5)
+          .map(h => ({
+            hour: h,
+            trades: hourMap[h].t,
+            winRate: Math.round((hourMap[h].w / hourMap[h].t) * 100),
+            avgPnl: Math.round(hourMap[h].total / hourMap[h].t),
+          }))
+
+        // Mejor y peor hora según avg P&L
+        const bestHour = hourStats.length > 0 ? [...hourStats].sort((a,b) => b.avgPnl - a.avgPnl)[0] : null
+        const worstHour = hourStats.length > 0 ? [...hourStats].sort((a,b) => a.avgPnl - b.avgPnl)[0] : null
+
+        // Rendimiento anual (cierre = PyG netas USD)
+        const yearMap: Record<string, { t: number; w: number; total: number }> = {}
+        for (const s of filtered) {
+          const y = s.fecha.slice(0, 4)
+          if (!yearMap[y]) yearMap[y] = { t: 0, w: 0, total: 0 }
+          yearMap[y].t++
+          yearMap[y].total += (s.cierre ?? 0)
+          if ((s.cierre ?? 0) >= 0) yearMap[y].w++
+        }
+        const yearStats = Object.entries(yearMap)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([year, d]) => ({
+            year,
+            trades: d.t,
+            winRate: Math.round((d.w / d.t) * 100),
+            avgPnl: Math.round(d.total / d.t),
+            totalPnl: Math.round(d.total),
+          }))
+
+        const maxTotal = Math.max(...yearStats.map(y => Math.abs(y.totalPnl)), 1)
+
+        // Threshold visualmente destacado
+        const dangerBucket = maeBuckets.find(b => b.label === '$500+')
+        const safeBucket = maeBuckets.find(b => b.label === '< $100')
+
+        return (
+          <Card className="bg-zinc-900 border-zinc-800">
+            <CardHeader>
+              <CardTitle className="text-blue-400">⚡ Radiografía Breakout v4</CardTitle>
+              <p className="text-xs text-zinc-500">
+                {filtered.length} trades · Lógica: breakout sobre HIGH de vela bajista · SL 50 pts · 9:30–15:30 NY · Datos en USD
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-7">
+
+              {/* Alerta principal — MAE threshold */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-emerald-500/10 border border-emerald-500/40 rounded-xl p-4">
+                  <p className="text-xs text-zinc-400 mb-1">MAE &lt; $500 USD</p>
+                  <p className="text-3xl font-black text-emerald-400">{safeBucket && safeBucket.trades > 0 ? `${maeBuckets[0].winRate + maeBuckets[1].winRate > 0 ? '~' : ''}` : ''}{
+                    (() => {
+                      const safe = maeBuckets.filter(b => b.min < 500)
+                      const total = safe.reduce((a,b) => a + b.trades, 0)
+                      const wins = safe.reduce((a,b) => a + Math.round(b.winRate * b.trades / 100), 0)
+                      return total > 0 ? Math.round(wins / total * 100) + '%' : '—'
+                    })()
+                  }</p>
+                  <p className="text-xs text-zinc-500 mt-1">win rate si adversidad baja</p>
+                </div>
+                <div className="bg-red-500/10 border border-red-500/40 rounded-xl p-4">
+                  <p className="text-xs text-zinc-400 mb-1">MAE ≥ $500 USD</p>
+                  <p className="text-3xl font-black text-red-400">{dangerBucket && dangerBucket.trades > 0 ? `${dangerBucket.winRate}%` : '—'}</p>
+                  <p className="text-xs text-zinc-500 mt-1">win rate si adversidad alta</p>
+                </div>
+              </div>
+
+              <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl p-3">
+                <p className="text-xs text-amber-300 leading-relaxed">
+                  <span className="font-bold">Regla operativa:</span> Si el trade va $500+ en tu contra, la probabilidad histórica colapsa.
+                  Con 10 MNQ a $2/pt, $500 USD ≈ <span className="font-bold text-white">25 puntos de adversidad</span>.
+                  Considera salida manual si llegas a ese nivel antes del SL de 50 pts.
+                </p>
+              </div>
+
+              {/* MAE buckets */}
+              <div>
+                <p className="text-sm font-semibold text-zinc-300 mb-3">📉 Adversidad (MAE USD) vs Probabilidad de ganar</p>
+                <div className="space-y-2">
+                  {maeBuckets.map(b => (
+                    <div key={b.label} className={`flex items-center gap-3 rounded-lg px-2 py-1 ${b.label === '$500+' ? 'bg-red-500/5 border border-red-500/20' : ''}`}>
+                      <span className="text-xs font-mono text-zinc-400 w-24 shrink-0">{b.label}</span>
+                      <div className="flex-1 h-2.5 bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${b.winRate >= 70 ? 'bg-emerald-500' : b.winRate >= 40 ? 'bg-amber-500' : 'bg-red-500'}`}
+                          style={{ width: `${b.winRate}%` }}
+                        />
+                      </div>
+                      <span className={`text-sm font-black w-12 text-right shrink-0 ${b.winRate >= 70 ? 'text-emerald-400' : b.winRate >= 40 ? 'text-amber-400' : 'text-red-400'}`}>
+                        {b.winRate}%
+                      </span>
+                      <span className={`text-xs w-20 text-right font-mono shrink-0 ${b.avgPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {b.avgPnl >= 0 ? '+' : ''}${b.avgPnl}
+                      </span>
+                      <span className="text-xs text-zinc-600 w-14 text-right shrink-0">{b.trades}t</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-zinc-600 mt-2">P&L promedio en USD · baja = Desviación adversa de TradingView</p>
+              </div>
+
+              {/* Rendimiento por hora de entrada */}
+              {hourStats.length > 0 && (
+                <div>
+                  <p className="text-sm font-semibold text-zinc-300 mb-1">⏰ P&L promedio (USD) por hora de entrada · mín. 5 trades</p>
+                  {bestHour && worstHour && (
+                    <p className="text-xs text-zinc-500 mb-3">
+                      Mejor: <span className="text-emerald-400 font-semibold">{bestHour.hour}</span> (${bestHour.avgPnl > 0 ? '+' : ''}{bestHour.avgPnl} avg) ·
+                      Evitar: <span className="text-red-400 font-semibold">{worstHour.hour}</span> (${worstHour.avgPnl} avg)
+                    </p>
+                  )}
+                  <div className="space-y-1.5">
+                    {hourStats.map(h => {
+                      const maxAbs = Math.max(...hourStats.map(x => Math.abs(x.avgPnl)), 1)
+                      const w = Math.round((Math.abs(h.avgPnl) / maxAbs) * 100)
+                      const isBest = bestHour?.hour === h.hour
+                      const isWorst = worstHour?.hour === h.hour
+                      return (
+                        <div key={h.hour} className={`flex items-center gap-3 rounded px-1 ${isBest ? 'bg-emerald-500/5' : isWorst ? 'bg-red-500/5' : ''}`}>
+                          <span className={`text-xs font-mono w-12 shrink-0 ${isBest ? 'text-emerald-400' : isWorst ? 'text-red-400' : 'text-zinc-400'}`}>{h.hour}</span>
+                          <div className="flex-1 h-2 bg-zinc-800 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full ${h.avgPnl >= 0 ? 'bg-blue-500' : 'bg-red-500'}`} style={{ width: `${w}%` }} />
+                          </div>
+                          <span className={`text-xs font-bold w-16 text-right shrink-0 ${h.avgPnl >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
+                            {h.avgPnl >= 0 ? '+$' : '-$'}{Math.abs(h.avgPnl)}
+                          </span>
+                          <span className="text-xs text-zinc-500 w-10 text-right shrink-0">{h.winRate}%</span>
+                          <span className="text-xs text-zinc-600 w-12 text-right shrink-0">{h.trades}t</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Rendimiento anual */}
+              <div>
+                <p className="text-sm font-semibold text-zinc-300 mb-3">📅 Rendimiento anual (USD neto)</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-zinc-500 border-b border-zinc-800">
+                        <th className="text-left pb-2">Año</th>
+                        <th className="text-right pb-2">Trades</th>
+                        <th className="text-right pb-2">Win%</th>
+                        <th className="text-right pb-2">Avg USD</th>
+                        <th className="text-right pb-2">Total USD</th>
+                        <th className="pb-2 w-24"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {yearStats.map(y => (
+                        <tr key={y.year} className={`border-b border-zinc-800/50 ${y.year === '2025' ? 'bg-red-500/5' : ''}`}>
+                          <td className="py-1.5 font-mono text-zinc-300 flex items-center gap-1">
+                            {y.year}
+                            {y.year === '2025' && <span className="text-red-400 text-xs">⚠️</span>}
+                          </td>
+                          <td className="text-right text-zinc-400">{y.trades}</td>
+                          <td className={`text-right font-semibold ${y.winRate >= 60 ? 'text-emerald-400' : y.winRate >= 50 ? 'text-amber-400' : 'text-red-400'}`}>{y.winRate}%</td>
+                          <td className={`text-right font-mono ${y.avgPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{y.avgPnl >= 0 ? '+$' : '-$'}{Math.abs(y.avgPnl)}</td>
+                          <td className={`text-right font-mono font-bold ${y.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{y.totalPnl >= 0 ? '+$' : '-$'}{Math.abs(y.totalPnl)}</td>
+                          <td className="pl-2">
+                            <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full ${y.totalPnl >= 0 ? 'bg-blue-500' : 'bg-red-500'}`}
+                                style={{ width: `${Math.round((Math.abs(y.totalPnl) / maxTotal) * 100)}%` }} />
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-xs text-zinc-600 mt-2">⚠️ 2025-04-02: trade de Liberation Day (aranceles Trump) — evento de cisne negro, stop no contuvo la pérdida.</p>
+              </div>
+
+            </CardContent>
+          </Card>
+        )
+      })()}
+
       {/* Peak Distribution */}
       <Card className="bg-zinc-900 border-zinc-800">
         <CardHeader><CardTitle>Distribución Hora Pico (Salida)</CardTitle></CardHeader>
