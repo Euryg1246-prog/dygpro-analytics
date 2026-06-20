@@ -81,6 +81,17 @@ export interface DayProfile {
   buckets: DayBucket[]
 }
 
+export interface MonthStat {
+  month: string       // 'YYYY-MM'
+  label: string       // 'Jun 25'
+  trades: number
+  wins: number
+  winRate: number
+  totalPnl: number
+  avgPnl: number
+  rolling3: number | null  // promedio móvil 3 meses
+}
+
 export interface SkipDaySim {
   skipDay: string
   kpisWith: KPIs    // con ese día

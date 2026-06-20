@@ -1,4 +1,4 @@
-import { Session, KPIs, DayStats, Streaks, MaeMfeStats, HourStat, PullbackSim, DayProfile, SkipDaySim } from './types'
+import { Session, KPIs, DayStats, Streaks, MaeMfeStats, HourStat, PullbackSim, DayProfile, SkipDaySim, MonthStat } from './types'
 
 export function calcKPIs(sessions: Session[]): KPIs {
   if (sessions.length === 0) {
@@ -300,4 +300,56 @@ export function calcSkipDaySim(sessions: Session[], skipDay: string): SkipDaySim
     tradeSavings: sessions.length - without.length,
     pnlDelta: kpisWithout.totalPts - kpisWith.totalPts,
   }
+}
+
+// ─── Rendimiento mensual filtrado por día ────────────────────────────────────
+export function calcMonthlyByDay(sessions: Session[], dia: string): MonthStat[] {
+  const normalize = (d: string) => {
+    const map: Record<string, string> = {
+      'Sun': 'Dom', 'Mon': 'Lun', 'Tue': 'Mar', 'Wed': 'Mié', 'Thu': 'Jue', 'Fri': 'Vie', 'Sat': 'Sáb',
+      'Domingo': 'Dom', 'Lunes': 'Lun', 'Martes': 'Mar',
+    }
+    return map[d] ?? d
+  }
+
+  const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+
+  const filtered = sessions.filter(s => normalize(s.dia) === dia && s.cierre !== null)
+
+  const monthMap: Record<string, { pnl: number[]; wins: number }> = {}
+  for (const s of filtered) {
+    const key = s.fecha.slice(0, 7) // 'YYYY-MM'
+    if (!monthMap[key]) monthMap[key] = { pnl: [], wins: 0 }
+    monthMap[key].pnl.push(s.cierre!)
+    if (s.cierre! >= 0) monthMap[key].wins++
+  }
+
+  const sorted = Object.entries(monthMap).sort(([a], [b]) => a.localeCompare(b))
+
+  const stats: MonthStat[] = sorted.map(([month, data]) => {
+    const [yr, mo] = month.split('-')
+    const total = data.pnl.reduce((a, b) => a + b, 0)
+    return {
+      month,
+      label: MONTH_NAMES[parseInt(mo) - 1] + ' ' + yr.slice(2),
+      trades: data.pnl.length,
+      wins: data.wins,
+      winRate: Math.round((data.wins / data.pnl.length) * 100),
+      totalPnl: Math.round(total),
+      avgPnl: Math.round(total / data.pnl.length),
+      rolling3: null,
+    }
+  })
+
+  // Rolling 3-month average
+  for (let i = 0; i < stats.length; i++) {
+    if (i >= 2) {
+      const slice = stats.slice(i - 2, i + 1)
+      stats[i].rolling3 = Math.round(
+        slice.reduce((a, s) => a + s.totalPnl, 0) / 3
+      )
+    }
+  }
+
+  return stats
 }

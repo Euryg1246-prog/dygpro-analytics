@@ -7,7 +7,7 @@ import {
   calcKPIs, calcDayStats, calcPeakDistribution,
   calcStreaks, calcMaeMfe, calcHourStats,
   calcWeeklyPnl, calcTodayPnl, calcPullbackSim,
-  calcDayProfiles, calcSkipDaySim,
+  calcDayProfiles, calcSkipDaySim, calcMonthlyByDay,
 } from '@/lib/calc'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -177,6 +177,7 @@ export default function Dashboard() {
   const dayStats    = calcDayStats(filtered)
   const dayProfiles = calcDayProfiles(filtered)
   const skipLunSim  = calcSkipDaySim(filtered, 'Lun')
+  const domMonthly  = calcMonthlyByDay(filtered, 'Dom')
   const peakDist    = calcPeakDistribution(filtered)
   const streaks     = calcStreaks(filtered)
   const maeMfe      = calcMaeMfe(filtered)
@@ -667,6 +668,133 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* ── ANÁLISIS DOMINGO ─────────────────────────────────────────── */}
+      {domMonthly.length > 0 && (() => {
+        const domKpis = calcKPIs(filtered.filter(s => {
+          const map: Record<string,string> = { 'Sun':'Dom','Domingo':'Dom' }
+          return (map[s.dia] ?? s.dia) === 'Dom'
+        }))
+        const bestMonth  = [...domMonthly].sort((a,b) => b.totalPnl - a.totalPnl)[0]
+        const worstMonth = [...domMonthly].sort((a,b) => a.totalPnl - b.totalPnl)[0]
+        const positiveMonths = domMonthly.filter(m => m.totalPnl > 0).length
+        const trend = domMonthly.length >= 3
+          ? domMonthly.slice(-3).reduce((a,m) => a + m.totalPnl, 0) / 3
+          : null
+        const trendPrev = domMonthly.length >= 6
+          ? domMonthly.slice(-6,-3).reduce((a,m) => a + m.totalPnl, 0) / 3
+          : null
+        const trendDir = trend !== null && trendPrev !== null
+          ? trend > trendPrev ? 'up' : 'down'
+          : null
+
+        return (
+          <Card className="bg-zinc-900 border-emerald-800/40">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-emerald-400">🌟 Análisis Domingo — Tu día core</CardTitle>
+                  <p className="text-xs text-zinc-500 mt-1">
+                    {domMonthly.length} meses · {domKpis.totalTrades} trades · PF {domKpis.profitFactor.toFixed(2)} · {domKpis.winRate.toFixed(1)}% win
+                  </p>
+                </div>
+                <div className={`text-sm font-bold px-3 py-1 rounded-full ${trendDir === 'up' ? 'bg-emerald-900/60 text-emerald-400' : trendDir === 'down' ? 'bg-red-900/60 text-red-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                  {trendDir === 'up' ? '↑ Mejorando' : trendDir === 'down' ? '↓ Deteriorando' : '→ Estable'}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-5">
+
+              {/* KPIs Domingo */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-emerald-950/30 border border-emerald-800/30 rounded-lg p-3 text-center">
+                  <p className="text-xs text-zinc-500">Total P&L Domingos</p>
+                  <p className={`text-2xl font-bold ${domKpis.totalPts >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {domKpis.totalPts >= 0 ? '+' : ''}{Math.round(domKpis.totalPts).toLocaleString()}
+                  </p>
+                </div>
+                <div className="bg-zinc-800/40 rounded-lg p-3 text-center">
+                  <p className="text-xs text-zinc-500">Meses positivos</p>
+                  <p className="text-2xl font-bold text-emerald-400">{positiveMonths}<span className="text-sm text-zinc-500">/{domMonthly.length}</span></p>
+                </div>
+                <div className="bg-zinc-800/40 rounded-lg p-3 text-center">
+                  <p className="text-xs text-zinc-500">Mejor mes</p>
+                  <p className="text-xl font-bold text-emerald-400">+{bestMonth.totalPnl.toLocaleString()}</p>
+                  <p className="text-xs text-zinc-600">{bestMonth.label}</p>
+                </div>
+                <div className="bg-zinc-800/40 rounded-lg p-3 text-center">
+                  <p className="text-xs text-zinc-500">Peor mes</p>
+                  <p className="text-xl font-bold text-red-400">{worstMonth.totalPnl.toLocaleString()}</p>
+                  <p className="text-xs text-zinc-600">{worstMonth.label}</p>
+                </div>
+              </div>
+
+              {/* Gráfica P&L mensual Domingo */}
+              <div>
+                <p className="text-xs text-zinc-500 mb-2">P&L por mes (barras) + tendencia 3 meses (línea)</p>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={domMonthly} margin={{ top: 4, right: 4, left: 0, bottom: 4 }}>
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#71717a' }} />
+                    <YAxis tick={{ fontSize: 10, fill: '#71717a' }} />
+                    <Tooltip
+                      contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }}
+                      itemStyle={{ color: '#e4e4e7' }}
+                      labelStyle={{ color: '#a1a1aa' }}
+                      formatter={(v: unknown, name: unknown) => {
+                        const n = v as number
+                        return [(n >= 0 ? '+' : '') + n.toLocaleString(), name === 'totalPnl' ? 'P&L' : 'Tendencia 3M']
+                      }}
+                    />
+                    <Bar dataKey="totalPnl" name="totalPnl">
+                      {domMonthly.map((m, i) => (
+                        <Cell key={i} fill={m.totalPnl >= 0 ? '#10b981' : '#ef4444'} />
+                      ))}
+                    </Bar>
+                    <Line type="monotone" dataKey="rolling3" stroke="#f59e0b" strokeWidth={2} dot={false} name="rolling3" connectNulls />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Tabla mensual */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-zinc-700 text-zinc-500">
+                      <th className="text-left py-1.5 px-2">Mes</th>
+                      <th className="text-right py-1.5 px-2">Trades</th>
+                      <th className="text-right py-1.5 px-2">Win%</th>
+                      <th className="text-right py-1.5 px-2">P&L Total</th>
+                      <th className="text-right py-1.5 px-2">Avg/trade</th>
+                      <th className="text-right py-1.5 px-2">Tend. 3M</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...domMonthly].reverse().map((m, i) => (
+                      <tr key={m.month} className={`border-b border-zinc-800/50 ${i % 2 === 0 ? '' : 'bg-zinc-800/20'}`}>
+                        <td className="py-1.5 px-2 text-zinc-300 font-medium">{m.label}</td>
+                        <td className="py-1.5 px-2 text-right text-zinc-400">{m.trades}</td>
+                        <td className={`py-1.5 px-2 text-right font-mono ${m.winRate >= 65 ? 'text-emerald-400' : m.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                          {m.winRate}%
+                        </td>
+                        <td className={`py-1.5 px-2 text-right font-mono font-bold ${m.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {m.totalPnl >= 0 ? '+' : ''}{m.totalPnl.toLocaleString()}
+                        </td>
+                        <td className={`py-1.5 px-2 text-right font-mono ${m.avgPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {m.avgPnl >= 0 ? '+' : ''}{m.avgPnl}
+                        </td>
+                        <td className={`py-1.5 px-2 text-right font-mono ${m.rolling3 === null ? 'text-zinc-600' : m.rolling3 >= 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                          {m.rolling3 !== null ? (m.rolling3 >= 0 ? '+' : '') + m.rolling3.toLocaleString() : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+            </CardContent>
+          </Card>
+        )
+      })()}
 
       {/* Peak Distribution */}
       <Card className="bg-zinc-900 border-zinc-800">
