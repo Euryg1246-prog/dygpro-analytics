@@ -36,6 +36,7 @@ export default function RootLayout({
               <Link href="/" className="text-zinc-400 hover:text-white transition">Dashboard</Link>
               <Link href="/sesiones" className="text-zinc-400 hover:text-white transition">Sesiones</Link>
               <Link href="/importar" className="text-zinc-400 hover:text-white transition">Importar</Link>
+              <Link href="/webhook" className="text-zinc-400 hover:text-white transition">Webhook</Link>
             </div>
           </div>
         </nav>

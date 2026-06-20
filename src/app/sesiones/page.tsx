@@ -79,9 +79,13 @@ export default function SesionesPage() {
           <label className="text-xs text-zinc-500 block mb-1">Día</label>
           <select value={filterDay} onChange={e => setFilterDay(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm">
             <option value="">Todos</option>
-            <option value="Sun">Domingo</option>
-            <option value="Mon">Lunes</option>
-            <option value="Tue">Martes</option>
+            <option value="Dom">Domingo</option>
+            <option value="Lun">Lunes</option>
+            <option value="Mar">Martes</option>
+            <option value="Mié">Miércoles</option>
+            <option value="Jue">Jueves</option>
+            <option value="Vie">Viernes</option>
+            <option value="Sáb">Sábado</option>
           </select>
         </div>
         <div>
