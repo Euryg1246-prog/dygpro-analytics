@@ -241,6 +241,11 @@ export default function ImportarPage() {
         return
       }
       total += data.imported
+      if (data.errors?.length) {
+        setStatus(`⚠️ ${total} importadas — error: ${data.errors[0]}`)
+        setImporting(false)
+        return
+      }
     }
 
     setStatus(`✓ ${total} sesiones importadas`)

@@ -17,13 +17,25 @@ export async function POST(req: NextRequest) {
     return true
   })
 
-  const { data, error } = await supabase
-    .from('sessions')
-    .upsert(deduped, { onConflict: 'strategy,fecha,hora_baja' })
-    .select()
+  // Insertar en batches de 50 capturando errores individuales
+  let inserted = 0
+  const errors: string[] = []
+  const BATCH = 50
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  for (let i = 0; i < deduped.length; i += BATCH) {
+    const batch = deduped.slice(i, i + BATCH)
+    const { data, error } = await supabase
+      .from('sessions')
+      .upsert(batch, { onConflict: 'strategy,fecha,hora_baja' })
+      .select()
+
+    if (error) {
+      errors.push(`batch ${i}-${i + BATCH}: ${error.message}`)
+    } else {
+      inserted += data?.length ?? 0
+    }
+  }
 
   const skipped = sessions.length - deduped.length
-  return NextResponse.json({ imported: data?.length ?? 0, skipped })
+  return NextResponse.json({ imported: inserted, skipped, errors: errors.length > 0 ? errors : undefined })
 }
