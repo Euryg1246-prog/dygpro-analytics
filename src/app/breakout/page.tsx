@@ -26,9 +26,9 @@ function toHourLabel(h: number) {
   return h === 0 ? '12AM' : h < 12 ? `${h}AM` : h === 12 ? '12PM' : `${h - 12}PM`
 }
 
-// 9:30 AM – 3:30 PM NY
-const SESSION_START = 9 * 60 + 30   // 570
-const SESSION_END   = 15 * 60 + 30  // 930
+// 8:00 AM – 8:00 PM NY (versión sin EMA, ventana óptima)
+const SESSION_START = 8 * 60        // 480
+const SESSION_END   = 20 * 60       // 1200
 
 // ── Signal logic ─────────────────────────────────────────────────────────────
 
@@ -57,7 +57,7 @@ const SIG: Record<BKSignal, { bg: string; border: string; text: string; label: s
              sub: 'MAE ≥ $500 USD — zona de colapso histórico (3.2% win rate). Salida manual.' },
   OUT:     { bg: 'bg-zinc-900',      border: 'border-zinc-800',   text: 'text-zinc-600',
              label: '⚫  SESIÓN CERRADA',
-             sub: 'Breakout v4 opera 9:30 AM – 3:30 PM NY' },
+             sub: 'Breakout v4 opera 8:00 AM – 8:00 PM NY' },
 }
 
 const DAYS_LIST = [
@@ -166,7 +166,7 @@ export default function BreakoutPage() {
           <p className="text-6xl">⏳</p>
           <div>
             <p className="text-2xl font-black text-zinc-200">No hay sesión</p>
-            <p className="text-zinc-500 mt-1">Breakout v4 · Lun–Vie 9:30 AM – 3:30 PM NY</p>
+            <p className="text-zinc-500 mt-1">Breakout v4 · Lun–Vie 8:00 AM – 8:00 PM NY</p>
           </div>
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-10 py-6">
             <p className="text-5xl font-mono font-black text-blue-400">
@@ -175,7 +175,7 @@ export default function BreakoutPage() {
             <p className="text-xs text-zinc-500 mt-2">para el próximo open</p>
           </div>
           <p className="text-xs text-zinc-600 max-w-xs">
-            Regresa a las 9:30 AM NY. Ten el chart de NQ en 1 min listo con EMA 50 en 1H.
+            Regresa a las 8:00 AM NY. Hora dorada: 1PM NY (67% win rate histórico).
           </p>
         </div>
       </div>
@@ -198,7 +198,7 @@ export default function BreakoutPage() {
     if ((s.cierre ?? 0) >= 0) hourMap[lbl].w++
   }
 
-  const SESSION_HOURS = ['9AM', '10AM', '11AM', '12PM', '1PM', '2PM', '3PM']
+  const SESSION_HOURS = ['8AM', '9AM', '10AM', '11AM', '12PM', '1PM', '2PM', '3PM', '4PM', '5PM', '6PM', '7PM']
   const hourStats = SESSION_HOURS
     .filter(h => hourMap[h] && hourMap[h].t >= 3)
     .map(h => ({
