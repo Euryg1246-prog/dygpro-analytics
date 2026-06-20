@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Session } from '@/lib/types'
 import {
@@ -132,31 +131,32 @@ function GoalTracker({ sessions }: { sessions: Session[] }) {
 }
 
 // ─── Dashboard principal ──────────────────────────────────────────────────────
-function Dashboard() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-
-  // Leer estado inicial desde URL params → persiste en refresh y es compartible
+export default function Dashboard() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
-  const [strategy, setStrategy] = useState(() => searchParams.get('s') ?? 'session_edge')
-  const [filterFrom, setFilterFrom] = useState(() => searchParams.get('from') ?? '')
-  const [filterTo, setFilterTo] = useState(() => searchParams.get('to') ?? '')
 
-  // Sincronizar estado → URL
-  const updateUrl = useCallback((s: string, from: string, to: string) => {
-    const params = new URLSearchParams()
-    if (s !== 'session_edge') params.set('s', s)
-    if (from) params.set('from', from)
-    if (to) params.set('to', to)
-    const qs = params.toString()
-    router.replace(qs ? `/?${qs}` : '/', { scroll: false })
-  }, [router])
+  // Persistir en localStorage → sobrevive refresh sin bugs de routing
+  const [strategy, setStrategy] = useState<string>(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem('dygpro_s') ?? 'session_edge'
+    return 'session_edge'
+  })
+  const [filterFrom, setFilterFrom] = useState<string>(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem('dygpro_from') ?? ''
+    return ''
+  })
+  const [filterTo, setFilterTo] = useState<string>(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem('dygpro_to') ?? ''
+    return ''
+  })
 
-  const handleStrategy = (v: string) => { setStrategy(v); updateUrl(v, filterFrom, filterTo) }
-  const handleFrom    = (v: string) => { setFilterFrom(v); updateUrl(strategy, v, filterTo) }
-  const handleTo      = (v: string) => { setFilterTo(v); updateUrl(strategy, filterFrom, v) }
-  const handleClear   = () => { setFilterFrom(''); setFilterTo(''); updateUrl(strategy, '', '') }
+  const handleStrategy = (v: string) => { setStrategy(v); localStorage.setItem('dygpro_s', v) }
+  const handleFrom    = (v: string) => { setFilterFrom(v); localStorage.setItem('dygpro_from', v) }
+  const handleTo      = (v: string) => { setFilterTo(v); localStorage.setItem('dygpro_to', v) }
+  const handleClear   = () => {
+    setFilterFrom(''); setFilterTo('')
+    localStorage.removeItem('dygpro_from')
+    localStorage.removeItem('dygpro_to')
+  }
 
   useEffect(() => {
     setLoading(true)
@@ -976,15 +976,3 @@ function StrategySelector({ value, onChange }: { value: string; onChange: (v: st
   )
 }
 
-// Wrapper con Suspense requerido por useSearchParams en Next.js App Router
-function DashboardInner() {
-  return <Dashboard />
-}
-
-export default function Page() {
-  return (
-    <Suspense fallback={<div className="text-zinc-500 text-center py-20">Cargando...</div>}>
-      <DashboardInner />
-    </Suspense>
-  )
-}
