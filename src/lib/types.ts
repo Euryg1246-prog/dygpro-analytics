@@ -16,6 +16,7 @@ export interface Session {
   mfe_mae: number | null
   acumulado: number | null
   source: string
+  notas?: string | null
   created_at?: string
 }
 

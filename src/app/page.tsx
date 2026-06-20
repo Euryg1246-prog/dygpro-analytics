@@ -133,6 +133,8 @@ export default function Dashboard() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
   const [strategy, setStrategy] = useState('session_edge')
+  const [filterFrom, setFilterFrom] = useState('')
+  const [filterTo, setFilterTo] = useState('')
 
   useEffect(() => {
     setLoading(true)
@@ -150,6 +152,13 @@ export default function Dashboard() {
 
   if (loading) return <div className="text-zinc-500 text-center py-20">Cargando...</div>
 
+  // Filtrar por rango de fechas
+  const filtered = sessions.filter(s => {
+    if (filterFrom && s.fecha < filterFrom) return false
+    if (filterTo && s.fecha > filterTo) return false
+    return true
+  })
+
   if (sessions.length === 0) return (
     <div className="space-y-4">
       <div className="flex items-center gap-4">
@@ -163,18 +172,27 @@ export default function Dashboard() {
     </div>
   )
 
-  const kpis        = calcKPIs(sessions)
-  const dayStats    = calcDayStats(sessions)
-  const peakDist    = calcPeakDistribution(sessions)
-  const streaks     = calcStreaks(sessions)
-  const maeMfe      = calcMaeMfe(sessions)
-  const hourStats   = calcHourStats(sessions)
-  const pullbackSim = calcPullbackSim(sessions)
+  const kpis        = calcKPIs(filtered)
+  const dayStats    = calcDayStats(filtered)
+  const peakDist    = calcPeakDistribution(filtered)
+  const streaks     = calcStreaks(filtered)
+  const maeMfe      = calcMaeMfe(filtered)
+  const hourStats   = calcHourStats(filtered)
+  const pullbackSim = calcPullbackSim(filtered)
 
-  const cumData = sessions.map((s, i) => ({
+  const cumData = filtered.map((s, i) => ({
     fecha: s.fecha.slice(5),
-    acumulado: Math.round(sessions.slice(0, i + 1).reduce((sum, ss) => sum + (ss.cierre ?? 0), 0)),
+    acumulado: Math.round(filtered.slice(0, i + 1).reduce((sum, ss) => sum + (ss.cierre ?? 0), 0)),
   }))
+
+  // P&L por fecha individual
+  const pnlByDate: Record<string, number> = {}
+  for (const s of filtered) {
+    pnlByDate[s.fecha] = (pnlByDate[s.fecha] ?? 0) + (s.cierre ?? 0)
+  }
+  const dailyPnlData = Object.entries(pnlByDate)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([fecha, pnl]) => ({ fecha: fecha.slice(5), pnl: Math.round(pnl) }))
 
   const kpiCards = [
     { label: 'Total Trades', value: kpis.totalTrades.toString(), color: 'text-white' },
@@ -190,13 +208,45 @@ export default function Dashboard() {
   const streakColor = streaks.currentStreakType === 'win' ? 'text-emerald-400' : streaks.currentStreakType === 'loss' ? 'text-red-400' : 'text-zinc-400'
   const streakEmoji = streaks.currentStreakType === 'win' ? '🔥' : '❄️'
 
+  const isFiltered = filterFrom || filterTo
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4 flex-wrap">
+      <div className="flex items-center gap-3 flex-wrap">
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <StrategySelector value={strategy} onChange={setStrategy} />
-        <span className="text-zinc-500 text-sm ml-auto">{strategyLabel}</span>
+        <div className="flex items-center gap-2 ml-auto">
+          <span className="text-xs text-zinc-500">Desde</span>
+          <input
+            type="date"
+            value={filterFrom}
+            onChange={e => setFilterFrom(e.target.value)}
+            className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-zinc-500"
+          />
+          <span className="text-xs text-zinc-500">Hasta</span>
+          <input
+            type="date"
+            value={filterTo}
+            onChange={e => setFilterTo(e.target.value)}
+            className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-zinc-500"
+          />
+          {isFiltered && (
+            <button
+              onClick={() => { setFilterFrom(''); setFilterTo('') }}
+              className="text-xs text-zinc-400 hover:text-white bg-zinc-800 border border-zinc-700 rounded px-2 py-1 transition-colors"
+            >
+              ✕ limpiar
+            </button>
+          )}
+        </div>
       </div>
+      {isFiltered && (
+        <p className="text-xs text-amber-400/70">
+          Mostrando {filtered.length} de {sessions.length} sesiones
+          {filterFrom ? ` desde ${filterFrom}` : ''}
+          {filterTo ? ` hasta ${filterTo}` : ''}
+        </p>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -262,7 +312,7 @@ export default function Dashboard() {
       <div className="grid md:grid-cols-2 gap-6">
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader><CardTitle>Actividad — Últimos 90 días</CardTitle></CardHeader>
-          <CardContent><CalendarHeatmap sessions={sessions} /></CardContent>
+          <CardContent><CalendarHeatmap sessions={filtered} /></CardContent>
         </Card>
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader><CardTitle>Rendimiento por Día</CardTitle></CardHeader>
@@ -285,12 +335,63 @@ export default function Dashboard() {
                   <p className={`text-sm font-bold ${d.winRate >= 60 ? 'text-emerald-400' : d.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
                     {d.winRate.toFixed(0)}% win
                   </p>
+                  <p className={`text-xs font-mono mt-0.5 ${d.totalPts >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {d.totalPts >= 0 ? '+' : ''}{Math.round(d.totalPts).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-zinc-600">
+                    avg {d.avgPts >= 0 ? '+' : ''}{d.avgPts.toFixed(0)}/trade
+                  </p>
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* P&L por fecha individual */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardHeader>
+          <CardTitle>P&L por Fecha</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={dailyPnlData} margin={{ top: 4, right: 4, left: 0, bottom: 4 }}>
+              <XAxis
+                dataKey="fecha"
+                tick={{ fontSize: 9, fill: '#71717a' }}
+                interval={Math.max(0, Math.floor(dailyPnlData.length / 20) - 1)}
+              />
+              <YAxis tick={{ fontSize: 10, fill: '#71717a' }} />
+              <Tooltip
+                contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }}
+                formatter={(v: unknown) => { const n = v as number; return [(n >= 0 ? '+' : '') + n.toLocaleString(), 'P&L'] }}
+              />
+              <Bar dataKey="pnl" name="P&L">
+                {dailyPnlData.map((d, i) => (
+                  <Cell key={i} fill={d.pnl >= 0 ? '#10b981' : '#ef4444'} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+          <div className="flex gap-4 mt-2 text-xs text-zinc-500 justify-end">
+            <span>
+              Mejor día:{' '}
+              <span className="text-emerald-400 font-mono">
+                +{Math.max(...dailyPnlData.map(d => d.pnl)).toLocaleString()}
+              </span>
+            </span>
+            <span>
+              Peor día:{' '}
+              <span className="text-red-400 font-mono">
+                {Math.min(...dailyPnlData.map(d => d.pnl)).toLocaleString()}
+              </span>
+            </span>
+            <span>
+              Días con trade: <span className="text-zinc-300">{dailyPnlData.length}</span>
+            </span>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* MAE/MFE + P&L por hora */}
       <div className="grid md:grid-cols-2 gap-6">

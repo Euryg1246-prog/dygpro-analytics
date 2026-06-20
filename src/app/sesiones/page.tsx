@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Session } from '@/lib/types'
@@ -9,6 +10,7 @@ type SortKey = keyof Session
 type SortDir = 'asc' | 'desc'
 
 export default function SesionesPage() {
+  const router = useRouter()
   const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
   const [filterStrategy, setFilterStrategy] = useState('all')
@@ -129,7 +131,11 @@ export default function SesionesPage() {
               </thead>
               <tbody>
                 {filtered.map((s, i) => (
-                  <tr key={s.id || i} className={`border-b border-zinc-800/50 ${i % 2 === 0 ? 'bg-zinc-900' : 'bg-zinc-900/50'}`}>
+                  <tr
+                    key={s.id || i}
+                    onClick={() => s.id && router.push(`/sesiones/${s.id}`)}
+                    className={`border-b border-zinc-800/50 cursor-pointer hover:bg-zinc-700/40 transition-colors ${i % 2 === 0 ? 'bg-zinc-900' : 'bg-zinc-900/50'}`}
+                  >
                     {columns.map(col => {
                       const val = s[col.key]
                       const display = col.format ? col.format(val as number) : (val?.toString() ?? '')
