@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
     .from('sessions')
     .select('*')
     .order('fecha', { ascending: false })
+    .limit(10000)
 
   if (strategy !== 'all') query = query.eq('strategy', strategy)
 
