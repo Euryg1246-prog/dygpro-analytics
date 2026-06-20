@@ -261,18 +261,21 @@ export default function EnVivoPage() {
 
         {/* Top horas en píldoras */}
         <div className="mt-3 space-y-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-zinc-600 w-16 shrink-0">📉 Low:</span>
-            {topLowHours.map(h => (
-              <span key={h.hour} className={`px-2.5 py-1 rounded-lg text-xs font-mono font-semibold ${
-                h.hour === hourNow
-                  ? isDom ? 'bg-emerald-500 text-white' : 'bg-blue-500 text-white'
-                  : 'bg-zinc-800 text-zinc-300'
-              }`}>
-                {h.hour} <span className="opacity-60">({h.pct}%)</span>
-              </span>
-            ))}
-          </div>
+          {topLowHours.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-zinc-600 w-16 shrink-0">📉 Low:</span>
+              {topLowHours.map(h => (
+                <span key={h.hour} className={`px-2.5 py-1 rounded-lg text-xs font-mono font-semibold ${
+                  h.hour === hourNow
+                    ? isDom ? 'bg-emerald-500 text-white' : 'bg-blue-500 text-white'
+                    : 'bg-zinc-800 text-zinc-300'
+                }`}>
+                  {h.hour} <span className="opacity-60">({h.pct}%)</span>
+                </span>
+              ))}
+            </div>
+          )}
+          {topHighHours.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-zinc-600 w-16 shrink-0">📈 High:</span>
             {topHighHours.map(h => (
@@ -283,6 +286,7 @@ export default function EnVivoPage() {
               </span>
             ))}
           </div>
+          )}
         </div>
       </div>
 
