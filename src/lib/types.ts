@@ -81,6 +81,26 @@ export interface DayProfile {
   buckets: DayBucket[]
 }
 
+export interface YearStat {
+  year: string
+  trades: number
+  wins: number
+  winRate: number
+  totalPnl: number
+  avgPnl: number
+}
+
+export interface PullbackBucket {
+  label: string
+  minPts: number
+  maxPts: number | null
+  trades: number
+  wins: number
+  winRate: number
+  avgPnl: number
+  totalPnl: number
+}
+
 export interface MonthStat {
   month: string       // 'YYYY-MM'
   label: string       // 'Jun 25'

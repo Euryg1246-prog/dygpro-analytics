@@ -9,6 +9,7 @@ import {
   calcStreaks, calcMaeMfe, calcHourStats,
   calcWeeklyPnl, calcTodayPnl, calcPullbackSim,
   calcDayProfiles, calcSkipDaySim, calcMonthlyByDay,
+  calcYearlyByDay, calcPullbackDepthBuckets, calcTopSessions,
 } from '@/lib/calc'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -198,6 +199,9 @@ function Dashboard() {
   const dayProfiles = calcDayProfiles(filtered)
   const skipLunSim  = calcSkipDaySim(filtered, 'Lun')
   const domMonthly  = calcMonthlyByDay(filtered, 'Dom')
+  const domYearly   = calcYearlyByDay(filtered, 'Dom')
+  const domBuckets  = calcPullbackDepthBuckets(filtered, 'Dom')
+  const domTop      = calcTopSessions(filtered, 'Dom', 5)
   const peakDist    = calcPeakDistribution(filtered)
   const streaks     = calcStreaks(filtered)
   const maeMfe      = calcMaeMfe(filtered)
@@ -809,6 +813,130 @@ function Dashboard() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Predictor: Pullback Depth → Win Rate */}
+              <div>
+                <p className="text-sm font-semibold text-zinc-300 mb-1">
+                  🎯 Predictor — La baja predice el resultado
+                </p>
+                <p className="text-xs text-zinc-500 mb-3">
+                  Profundidad del pullback vs probabilidad de ganar (histórico {domBuckets.reduce((a,b)=>a+b.trades,0)} domingos con datos)
+                </p>
+                <div className="space-y-2">
+                  {domBuckets.map(b => {
+                    const danger  = b.winRate < 35
+                    const caution = b.winRate >= 35 && b.winRate < 60
+                    const safe    = b.winRate >= 60
+                    const barColor = safe ? '#10b981' : caution ? '#f59e0b' : '#ef4444'
+                    return (
+                      <div key={b.label} className={`rounded-lg p-3 border ${danger ? 'border-red-800/40 bg-red-950/10' : caution ? 'border-amber-800/40 bg-amber-950/10' : 'border-emerald-800/40 bg-emerald-950/10'}`}>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-mono text-zinc-300 w-28">{b.label}</span>
+                            <span className={`text-lg font-bold ${safe ? 'text-emerald-400' : caution ? 'text-amber-400' : 'text-red-400'}`}>
+                              {b.winRate}%
+                            </span>
+                            <span className="text-xs text-zinc-500">win rate</span>
+                            {b.trades > 0 && <span className="text-xs text-zinc-600">({b.trades} trades)</span>}
+                          </div>
+                          <div className="text-right">
+                            <span className={`text-sm font-mono ${b.avgPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {b.avgPnl >= 0 ? '+' : ''}{b.avgPnl} avg
+                            </span>
+                          </div>
+                        </div>
+                        <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                          <div style={{ width: `${b.winRate}%`, backgroundColor: barColor }} className="h-full rounded-full transition-all" />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <p className="text-xs text-zinc-600 mt-2">
+                  💡 Punto crítico: baja &gt; 150 pts → probabilidad se invierte. El SL de 500 pts cubre los casos extremos.
+                </p>
+              </div>
+
+              {/* Año por año */}
+              <div>
+                <p className="text-sm font-semibold text-zinc-300 mb-3">📅 Rendimiento anual — Domingo</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-zinc-700 text-zinc-500">
+                        <th className="text-left py-1.5 px-2">Año</th>
+                        <th className="text-right py-1.5 px-2">Trades</th>
+                        <th className="text-right py-1.5 px-2">Win%</th>
+                        <th className="text-right py-1.5 px-2">Avg/trade</th>
+                        <th className="text-right py-1.5 px-2">Total P&L</th>
+                        <th className="text-left py-1.5 px-2">Barra</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...domYearly].reverse().map((y, i) => {
+                        const maxAbs = Math.max(...domYearly.map(yy => Math.abs(yy.totalPnl)), 1)
+                        const barW = Math.round((Math.abs(y.totalPnl) / maxAbs) * 100)
+                        return (
+                          <tr key={y.year} className={`border-b border-zinc-800/50 ${i % 2 === 0 ? '' : 'bg-zinc-800/20'}`}>
+                            <td className="py-2 px-2 font-bold text-zinc-200">{y.year}</td>
+                            <td className="py-2 px-2 text-right text-zinc-400">{y.trades}</td>
+                            <td className={`py-2 px-2 text-right font-mono ${y.winRate >= 65 ? 'text-emerald-400' : y.winRate >= 55 ? 'text-yellow-400' : 'text-red-400'}`}>
+                              {y.winRate}%
+                            </td>
+                            <td className={`py-2 px-2 text-right font-mono ${y.avgPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {y.avgPnl >= 0 ? '+' : ''}{y.avgPnl}
+                            </td>
+                            <td className={`py-2 px-2 text-right font-mono font-bold ${y.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {y.totalPnl >= 0 ? '+' : ''}{y.totalPnl.toLocaleString()}
+                            </td>
+                            <td className="py-2 px-2 w-32">
+                              <div className="h-3 bg-zinc-800 rounded-full overflow-hidden">
+                                <div style={{ width: `${barW}%`, backgroundColor: y.totalPnl >= 0 ? '#10b981' : '#ef4444' }} className="h-full rounded-full" />
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Top mejores / peores */}
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-emerald-400 mb-2">🏆 Mejores domingos</p>
+                  <div className="space-y-1">
+                    {domTop.best.map((s, i) => (
+                      <div key={s.id ?? i} className="flex items-center justify-between bg-emerald-950/20 border border-emerald-800/30 rounded px-3 py-1.5">
+                        <div>
+                          <span className="text-xs font-mono text-zinc-300">{s.fecha}</span>
+                          {s.baja !== null && (
+                            <span className="text-xs text-zinc-500 ml-2">baja {s.baja}</span>
+                          )}
+                        </div>
+                        <span className="text-sm font-bold text-emerald-400">+{s.cierre}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-red-400 mb-2">💀 Peores domingos</p>
+                  <div className="space-y-1">
+                    {domTop.worst.map((s, i) => (
+                      <div key={s.id ?? i} className="flex items-center justify-between bg-red-950/20 border border-red-800/30 rounded px-3 py-1.5">
+                        <div>
+                          <span className="text-xs font-mono text-zinc-300">{s.fecha}</span>
+                          {s.baja !== null && (
+                            <span className="text-xs text-red-400/60 ml-2">baja {s.baja}</span>
+                          )}
+                        </div>
+                        <span className="text-sm font-bold text-red-400">{s.cierre}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
 
             </CardContent>

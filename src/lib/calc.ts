@@ -1,4 +1,4 @@
-import { Session, KPIs, DayStats, Streaks, MaeMfeStats, HourStat, PullbackSim, DayProfile, SkipDaySim, MonthStat } from './types'
+import { Session, KPIs, DayStats, Streaks, MaeMfeStats, HourStat, PullbackSim, DayProfile, SkipDaySim, MonthStat, YearStat, PullbackBucket } from './types'
 
 export function calcKPIs(sessions: Session[]): KPIs {
   if (sessions.length === 0) {
@@ -352,4 +352,102 @@ export function calcMonthlyByDay(sessions: Session[], dia: string): MonthStat[] 
   }
 
   return stats
+}
+
+// ─── Rendimiento anual filtrado por día ───────────────────────────────────────
+export function calcYearlyByDay(sessions: Session[], dia: string): YearStat[] {
+  const normalize = (d: string) => {
+    const map: Record<string, string> = {
+      'Sun':'Dom','Mon':'Lun','Tue':'Mar','Wed':'Mié','Thu':'Jue','Fri':'Vie','Sat':'Sáb',
+      'Domingo':'Dom','Lunes':'Lun','Martes':'Mar',
+    }
+    return map[d] ?? d
+  }
+
+  const filtered = sessions.filter(s => normalize(s.dia) === dia && s.cierre !== null)
+  const yearMap: Record<string, { pnl: number[]; wins: number }> = {}
+
+  for (const s of filtered) {
+    const year = s.fecha.slice(0, 4)
+    if (!yearMap[year]) yearMap[year] = { pnl: [], wins: 0 }
+    yearMap[year].pnl.push(s.cierre!)
+    if (s.cierre! >= 0) yearMap[year].wins++
+  }
+
+  return Object.entries(yearMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([year, data]) => {
+      const total = data.pnl.reduce((a, b) => a + b, 0)
+      return {
+        year,
+        trades: data.pnl.length,
+        wins: data.wins,
+        winRate: Math.round((data.wins / data.pnl.length) * 100),
+        totalPnl: Math.round(total),
+        avgPnl: Math.round(total / data.pnl.length),
+      }
+    })
+}
+
+// ─── Predictor: win rate por profundidad de pullback ─────────────────────────
+export function calcPullbackDepthBuckets(sessions: Session[], dia?: string): PullbackBucket[] {
+  const normalize = (d: string) => {
+    const map: Record<string, string> = {
+      'Sun':'Dom','Mon':'Lun','Tue':'Mar','Wed':'Mié','Thu':'Jue','Fri':'Vie','Sat':'Sáb',
+      'Domingo':'Dom','Lunes':'Lun','Martes':'Mar',
+    }
+    return map[d] ?? d
+  }
+
+  const BUCKETS: { label: string; min: number; max: number | null }[] = [
+    { label: '< 50 pts',    min: 0,   max: 50   },
+    { label: '50–149 pts',  min: 50,  max: 150  },
+    { label: '150–299 pts', min: 150, max: 300  },
+    { label: '300–499 pts', min: 300, max: 500  },
+    { label: '500+ pts',    min: 500, max: null },
+  ]
+
+  const relevant = sessions.filter(s =>
+    s.baja !== null && s.cierre !== null &&
+    (!dia || normalize(s.dia) === dia)
+  )
+
+  return BUCKETS.map(b => {
+    const inBucket = relevant.filter(s => {
+      const depth = Math.abs(s.baja!)
+      return depth >= b.min && (b.max === null || depth < b.max)
+    })
+    const wins = inBucket.filter(s => s.cierre! >= 0)
+    const total = inBucket.reduce((a, s) => a + s.cierre!, 0)
+    return {
+      label: b.label,
+      minPts: b.min,
+      maxPts: b.max,
+      trades: inBucket.length,
+      wins: wins.length,
+      winRate: inBucket.length > 0 ? Math.round((wins.length / inBucket.length) * 100) : 0,
+      avgPnl: inBucket.length > 0 ? Math.round(total / inBucket.length) : 0,
+      totalPnl: Math.round(total),
+    }
+  })
+}
+
+// ─── Top mejores / peores sesiones de un día ─────────────────────────────────
+export function calcTopSessions(sessions: Session[], dia: string, n = 5): { best: Session[]; worst: Session[] } {
+  const normalize = (d: string) => {
+    const map: Record<string, string> = {
+      'Sun':'Dom','Mon':'Lun','Tue':'Mar','Wed':'Mié','Thu':'Jue','Fri':'Vie','Sat':'Sáb',
+      'Domingo':'Dom','Lunes':'Lun','Martes':'Mar',
+    }
+    return map[d] ?? d
+  }
+
+  const day = sessions
+    .filter(s => normalize(s.dia) === dia && s.cierre !== null)
+    .sort((a, b) => (b.cierre ?? 0) - (a.cierre ?? 0))
+
+  return {
+    best:  day.slice(0, n),
+    worst: day.slice(-n).reverse(),
+  }
 }
