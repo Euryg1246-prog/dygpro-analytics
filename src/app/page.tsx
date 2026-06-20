@@ -299,6 +299,7 @@ export default function Dashboard() {
               <YAxis tick={{ fontSize: 10, fill: '#71717a' }} />
               <Tooltip
                 contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }}
+                itemStyle={{ color: '#e4e4e7' }}
                 labelStyle={{ color: '#a1a1aa' }}
                 formatter={(v: unknown) => { const n = v as number; return [(n >= 0 ? '+' : '') + n.toLocaleString(), 'P&L'] }}
               />
@@ -321,7 +322,7 @@ export default function Dashboard() {
               <BarChart data={dayStats}>
                 <XAxis dataKey="dia" tick={{ fontSize: 12, fill: '#a1a1aa' }} />
                 <YAxis tick={{ fontSize: 10, fill: '#71717a' }} />
-                <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }} />
+                <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }} itemStyle={{ color: '#e4e4e7' }} labelStyle={{ color: '#a1a1aa' }} />
                 <Bar dataKey="avgPts" name="Avg P&L">
                   {dayStats.map((d, i) => <Cell key={i} fill={d.avgPts >= 0 ? '#10b981' : '#ef4444'} />)}
                 </Bar>
@@ -363,7 +364,7 @@ export default function Dashboard() {
               />
               <YAxis tick={{ fontSize: 10, fill: '#71717a' }} />
               <Tooltip
-                contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }}
+                contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }} itemStyle={{ color: '#e4e4e7' }} labelStyle={{ color: '#a1a1aa' }}
                 formatter={(v: unknown) => { const n = v as number; return [(n >= 0 ? '+' : '') + n.toLocaleString(), 'P&L'] }}
               />
               <Bar dataKey="pnl" name="P&L">
@@ -448,7 +449,7 @@ export default function Dashboard() {
                     <XAxis dataKey="hour" tick={{ fontSize: 10, fill: '#a1a1aa' }} />
                     <YAxis tick={{ fontSize: 10, fill: '#71717a' }} />
                     <Tooltip
-                      contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }}
+                      contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }} itemStyle={{ color: '#e4e4e7' }} labelStyle={{ color: '#a1a1aa' }}
                       formatter={(v: unknown) => { const n = v as number; return [(n >= 0 ? '+' : '') + n, 'Avg P&L'] }}
                     />
                     <Bar dataKey="avgPnl" name="Avg P&L">
@@ -559,7 +560,7 @@ export default function Dashboard() {
             <BarChart data={peakDist} layout="vertical">
               <XAxis type="number" tick={{ fontSize: 10, fill: '#71717a' }} />
               <YAxis type="category" dataKey="block" tick={{ fontSize: 11, fill: '#a1a1aa' }} width={80} />
-              <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }} />
+              <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }} itemStyle={{ color: '#e4e4e7' }} labelStyle={{ color: '#a1a1aa' }} />
               <Bar dataKey="pct" name="%" fill="#6366f1" />
             </BarChart>
           </ResponsiveContainer>

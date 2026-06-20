@@ -288,7 +288,7 @@ export default function ImportarPage() {
               <select
                 value={showCustom ? '__custom__' : strategy}
                 onChange={e => handleStrategyChange(e.target.value)}
-                className="bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm"
+                className="bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200"
               >
                 <option value="session_edge">NQ Session Edge</option>
                 <option value="breakout_v4">Breakout Long v4</option>
@@ -304,7 +304,7 @@ export default function ImportarPage() {
                   value={customStrategy}
                   onChange={e => handleCustomChange(e.target.value)}
                   placeholder="ej: reversal_v1"
-                  className="bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm w-52"
+                  className="bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 w-52"
                 />
               </div>
             )}

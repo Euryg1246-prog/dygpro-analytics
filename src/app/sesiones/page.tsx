@@ -82,7 +82,7 @@ export default function SesionesPage() {
       <div className="flex gap-4 flex-wrap items-end">
         <div>
           <label className="text-xs text-zinc-500 block mb-1">Estrategia</label>
-          <select value={filterStrategy} onChange={e => setFilterStrategy(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm">
+          <select value={filterStrategy} onChange={e => setFilterStrategy(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm text-zinc-200">
             <option value="all">Todas</option>
             <option value="session_edge">Session Edge</option>
             <option value="breakout_v4">Breakout v4</option>
@@ -91,7 +91,7 @@ export default function SesionesPage() {
         </div>
         <div>
           <label className="text-xs text-zinc-500 block mb-1">Día</label>
-          <select value={filterDay} onChange={e => setFilterDay(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm">
+          <select value={filterDay} onChange={e => setFilterDay(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm text-zinc-200">
             <option value="">Todos</option>
             <option value="Dom">Domingo</option>
             <option value="Lun">Lunes</option>

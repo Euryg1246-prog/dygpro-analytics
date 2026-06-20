@@ -87,7 +87,7 @@ export default function CompararPage() {
             <LineChart data={equityData}>
               <XAxis dataKey="fecha" tick={{ fontSize: 10, fill: '#71717a' }} interval="preserveStartEnd" />
               <YAxis tick={{ fontSize: 10, fill: '#71717a' }} />
-              <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }} labelStyle={{ color: '#a1a1aa' }} />
+              <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }} itemStyle={{ color: '#e4e4e7' }} labelStyle={{ color: '#a1a1aa' }} />
               <Legend />
               {STRATEGIES.map(s => (
                 <Line key={s.value} type="monotone" dataKey={s.value} name={s.label} stroke={s.color} strokeWidth={2} dot={false} />
