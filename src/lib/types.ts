@@ -63,6 +63,32 @@ export interface HourStat {
   totalPnl: number
 }
 
+export interface DayBucket {
+  label: string   // ej: "<-400", "-400a-200", etc.
+  count: number
+  pct: number
+}
+
+export interface DayProfile {
+  dia: string
+  trades: number
+  winRate: number
+  totalPts: number
+  avgPts: number
+  median: number
+  best: number
+  worst: number
+  buckets: DayBucket[]
+}
+
+export interface SkipDaySim {
+  skipDay: string
+  kpisWith: KPIs    // con ese día
+  kpisWithout: KPIs // sin ese día
+  tradeSavings: number
+  pnlDelta: number
+}
+
 export interface PullbackSim {
   totalWithPullback: number      // trades que tuvieron retroceso
   recoveredCount: number         // retrocesos que cerraron positivos

@@ -1,4 +1,4 @@
-import { Session, KPIs, DayStats, Streaks, MaeMfeStats, HourStat, PullbackSim } from './types'
+import { Session, KPIs, DayStats, Streaks, MaeMfeStats, HourStat, PullbackSim, DayProfile, SkipDaySim } from './types'
 
 export function calcKPIs(sessions: Session[]): KPIs {
   if (sessions.length === 0) {
@@ -222,4 +222,82 @@ export function calcTodayPnl(sessions: Session[]): number {
   return sessions
     .filter(s => s.fecha === today)
     .reduce((sum, s) => sum + (s.cierre ?? 0), 0)
+}
+
+// ─── Perfil de distribución por día ──────────────────────────────────────────
+export function calcDayProfiles(sessions: Session[]): DayProfile[] {
+  const DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+  const BUCKETS = [
+    { label: '< -400', test: (v: number) => v < -400 },
+    { label: '-400 a -200', test: (v: number) => v >= -400 && v < -200 },
+    { label: '-200 a 0', test: (v: number) => v >= -200 && v < 0 },
+    { label: '0 a 200', test: (v: number) => v >= 0 && v < 200 },
+    { label: '200 a 400', test: (v: number) => v >= 200 && v < 400 },
+    { label: '> 400', test: (v: number) => v >= 400 },
+  ]
+
+  const normalize = (dia: string) => {
+    const map: Record<string, string> = {
+      'Sun': 'Dom', 'Mon': 'Lun', 'Tue': 'Mar', 'Wed': 'Mié', 'Thu': 'Jue', 'Fri': 'Vie', 'Sat': 'Sáb',
+      'Domingo': 'Dom', 'Lunes': 'Lun', 'Martes': 'Mar', 'Miércoles': 'Mié', 'Jueves': 'Jue', 'Viernes': 'Vie', 'Sábado': 'Sáb',
+    }
+    return map[dia] ?? dia
+  }
+
+  return DAYS.map(dia => {
+    const pnls = sessions
+      .filter(s => normalize(s.dia) === dia && s.cierre !== null)
+      .map(s => s.cierre!)
+
+    if (pnls.length === 0) return null
+
+    const sorted = [...pnls].sort((a, b) => a - b)
+    const mid = Math.floor(sorted.length / 2)
+    const median = sorted.length % 2 === 0
+      ? (sorted[mid - 1] + sorted[mid]) / 2
+      : sorted[mid]
+
+    const wins = pnls.filter(v => v >= 0)
+    const total = pnls.reduce((a, b) => a + b, 0)
+
+    const buckets = BUCKETS.map(b => {
+      const count = pnls.filter(b.test).length
+      return { label: b.label, count, pct: Math.round((count / pnls.length) * 100) }
+    })
+
+    return {
+      dia,
+      trades: pnls.length,
+      winRate: Math.round((wins.length / pnls.length) * 100),
+      totalPts: Math.round(total),
+      avgPts: Math.round(total / pnls.length),
+      median: Math.round(median),
+      best: Math.round(sorted[sorted.length - 1]),
+      worst: Math.round(sorted[0]),
+      buckets,
+    }
+  }).filter(Boolean) as DayProfile[]
+}
+
+// ─── Simulación: ¿Qué pasa si saltas un día? ─────────────────────────────────
+export function calcSkipDaySim(sessions: Session[], skipDay: string): SkipDaySim {
+  const normalize = (dia: string) => {
+    const map: Record<string, string> = {
+      'Sun': 'Dom', 'Mon': 'Lun', 'Tue': 'Mar', 'Wed': 'Mié', 'Thu': 'Jue', 'Fri': 'Vie', 'Sat': 'Sáb',
+      'Domingo': 'Dom', 'Lunes': 'Lun', 'Martes': 'Mar', 'Miércoles': 'Mié', 'Jueves': 'Jue', 'Viernes': 'Vie', 'Sábado': 'Sáb',
+    }
+    return map[dia] ?? dia
+  }
+
+  const without = sessions.filter(s => normalize(s.dia) !== skipDay)
+  const kpisWith    = calcKPIs(sessions)
+  const kpisWithout = calcKPIs(without)
+
+  return {
+    skipDay,
+    kpisWith,
+    kpisWithout,
+    tradeSavings: sessions.length - without.length,
+    pnlDelta: kpisWithout.totalPts - kpisWith.totalPts,
+  }
 }

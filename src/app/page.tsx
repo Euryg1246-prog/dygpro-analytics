@@ -7,6 +7,7 @@ import {
   calcKPIs, calcDayStats, calcPeakDistribution,
   calcStreaks, calcMaeMfe, calcHourStats,
   calcWeeklyPnl, calcTodayPnl, calcPullbackSim,
+  calcDayProfiles, calcSkipDaySim,
 } from '@/lib/calc'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -174,6 +175,8 @@ export default function Dashboard() {
 
   const kpis        = calcKPIs(filtered)
   const dayStats    = calcDayStats(filtered)
+  const dayProfiles = calcDayProfiles(filtered)
+  const skipLunSim  = calcSkipDaySim(filtered, 'Lun')
   const peakDist    = calcPeakDistribution(filtered)
   const streaks     = calcStreaks(filtered)
   const maeMfe      = calcMaeMfe(filtered)
@@ -318,7 +321,7 @@ export default function Dashboard() {
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader><CardTitle>Rendimiento por Día</CardTitle></CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={180}>
+            <ResponsiveContainer width="100%" height={160}>
               <BarChart data={dayStats}>
                 <XAxis dataKey="dia" tick={{ fontSize: 12, fill: '#a1a1aa' }} />
                 <YAxis tick={{ fontSize: 10, fill: '#71717a' }} />
@@ -339,15 +342,128 @@ export default function Dashboard() {
                   <p className={`text-xs font-mono mt-0.5 ${d.totalPts >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                     {d.totalPts >= 0 ? '+' : ''}{Math.round(d.totalPts).toLocaleString()}
                   </p>
-                  <p className="text-xs text-zinc-600">
-                    avg {d.avgPts >= 0 ? '+' : ''}{d.avgPts.toFixed(0)}/trade
-                  </p>
+                  <p className="text-xs text-zinc-600">avg {d.avgPts >= 0 ? '+' : ''}{d.avgPts.toFixed(0)}/trade</p>
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Distribución por día + Simulación Sin Lunes */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardHeader>
+          <CardTitle>Distribución de Trades por Día</CardTitle>
+          <p className="text-xs text-zinc-500 mt-1">¿Dónde están concentradas las pérdidas y ganancias de cada día?</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {dayProfiles.map(dp => {
+            const isWeak = dp.winRate < 55
+            const BUCKET_COLORS = ['#dc2626', '#f97316', '#71717a', '#34d399', '#10b981', '#059669']
+            return (
+              <div key={dp.dia} className={`rounded-lg p-3 border ${isWeak ? 'border-red-800/50 bg-red-950/10' : 'border-zinc-800 bg-zinc-800/30'}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <span className={`font-bold text-base ${isWeak ? 'text-red-400' : 'text-zinc-200'}`}>{dp.dia}</span>
+                    {isWeak && <span className="text-xs bg-red-900/60 text-red-300 px-2 py-0.5 rounded-full">⚠ Día débil</span>}
+                    <span className="text-xs text-zinc-500">{dp.trades} trades</span>
+                  </div>
+                  <div className="flex gap-4 text-xs text-right">
+                    <span className={dp.winRate >= 60 ? 'text-emerald-400' : dp.winRate >= 55 ? 'text-yellow-400' : 'text-red-400'}>
+                      {dp.winRate}% win
+                    </span>
+                    <span className={dp.avgPts >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                      avg {dp.avgPts >= 0 ? '+' : ''}{dp.avgPts}/trade
+                    </span>
+                    <span className="text-zinc-500">mediana {dp.median >= 0 ? '+' : ''}{dp.median}</span>
+                    <span className="text-red-400/70">peor {dp.worst}</span>
+                    <span className="text-emerald-400/70">mejor +{dp.best}</span>
+                  </div>
+                </div>
+                {/* Barra de distribución */}
+                <div className="flex h-6 rounded overflow-hidden gap-px">
+                  {dp.buckets.map((b, i) => (
+                    b.count > 0 && (
+                      <div
+                        key={b.label}
+                        style={{ width: `${b.pct}%`, backgroundColor: BUCKET_COLORS[i] }}
+                        title={`${b.label}: ${b.count} trades (${b.pct}%)`}
+                        className="relative group"
+                      >
+                        {b.pct >= 8 && (
+                          <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white/90">
+                            {b.pct}%
+                          </span>
+                        )}
+                      </div>
+                    )
+                  ))}
+                </div>
+                <div className="flex gap-3 mt-1.5 flex-wrap">
+                  {dp.buckets.map((b, i) => b.count > 0 && (
+                    <span key={b.label} className="text-[10px] text-zinc-500 flex items-center gap-1">
+                      <span style={{ backgroundColor: BUCKET_COLORS[i] }} className="inline-block w-2 h-2 rounded-sm" />
+                      {b.label}: {b.count}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+
+          {/* Simulación Sin Lunes */}
+          {skipLunSim.tradeSavings > 0 && (
+            <div className="mt-2 rounded-lg border border-amber-700/40 bg-amber-950/10 p-4">
+              <p className="text-sm font-semibold text-amber-400 mb-3">💡 Simulación: ¿Qué pasa si desactivas la estrategia los lunes?</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  {
+                    label: 'Win Rate',
+                    before: skipLunSim.kpisWith.winRate.toFixed(1) + '%',
+                    after: skipLunSim.kpisWithout.winRate.toFixed(1) + '%',
+                    better: skipLunSim.kpisWithout.winRate > skipLunSim.kpisWith.winRate,
+                  },
+                  {
+                    label: 'Profit Factor',
+                    before: skipLunSim.kpisWith.profitFactor.toFixed(2),
+                    after: skipLunSim.kpisWithout.profitFactor.toFixed(2),
+                    better: skipLunSim.kpisWithout.profitFactor > skipLunSim.kpisWith.profitFactor,
+                  },
+                  {
+                    label: 'Max Drawdown',
+                    before: Math.round(skipLunSim.kpisWith.maxDD).toLocaleString(),
+                    after: Math.round(skipLunSim.kpisWithout.maxDD).toLocaleString(),
+                    better: skipLunSim.kpisWithout.maxDD < skipLunSim.kpisWith.maxDD,
+                  },
+                  {
+                    label: 'Total P&L',
+                    before: (skipLunSim.kpisWith.totalPts >= 0 ? '+' : '') + Math.round(skipLunSim.kpisWith.totalPts).toLocaleString(),
+                    after: (skipLunSim.kpisWithout.totalPts >= 0 ? '+' : '') + Math.round(skipLunSim.kpisWithout.totalPts).toLocaleString(),
+                    better: skipLunSim.pnlDelta >= 0,
+                  },
+                ].map(item => (
+                  <div key={item.label} className="bg-zinc-800/50 rounded p-3 text-center">
+                    <p className="text-xs text-zinc-500 mb-2">{item.label}</p>
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="text-sm text-zinc-400 line-through">{item.before}</span>
+                      <span className="text-xs text-zinc-600">→</span>
+                      <span className={`text-sm font-bold ${item.better ? 'text-emerald-400' : 'text-red-400'}`}>{item.after}</span>
+                    </div>
+                    {item.better && <p className="text-[10px] text-emerald-500 mt-1">↑ mejora</p>}
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-zinc-500 mt-3">
+                Eliminas <span className="text-amber-400 font-mono">{skipLunSim.tradeSavings}</span> trades de lunes.
+                {skipLunSim.pnlDelta >= 0
+                  ? <span className="text-emerald-400"> La estrategia mejora +${Math.round(Math.abs(skipLunSim.pnlDelta)).toLocaleString()} sin operar los lunes.</span>
+                  : <span className="text-red-400"> Perderías ${Math.round(Math.abs(skipLunSim.pnlDelta)).toLocaleString()} en P&L al saltarte los lunes.</span>
+                }
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* P&L por fecha individual */}
       <Card className="bg-zinc-900 border-zinc-800">
