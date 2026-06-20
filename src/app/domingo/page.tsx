@@ -22,21 +22,25 @@ const HOUR_ORDER = [
   '12PM','1PM','2PM','3PM','4PM','5PM','6PM','7PM','8PM','9PM','10PM','11PM',
 ]
 
-type Signal = 'GO' | 'CAUTION' | 'NO'
+type Signal = 'GO' | 'GO_OOW' | 'CAUTION' | 'NO'
 
 function getSignal(winRate: number | null, inWindow: boolean, monthAvg: number | null): Signal {
   if (winRate === null) return 'CAUTION'
   if (winRate < 35) return 'NO'
-  if (winRate >= 75 && inWindow && (monthAvg === null || monthAvg >= 0)) return 'GO'
+  // Pullback fuerte → GO siempre (la probabilidad sola justifica entrar)
+  if (winRate >= 80) return (monthAvg === null || monthAvg >= 0) ? 'GO' : 'GO_OOW'
+  // Pullback bueno + en ventana → GO limpio
   if (winRate >= 60 && inWindow) return 'GO'
-  if (winRate >= 60) return 'CAUTION'
+  // Pullback bueno pero fuera de ventana → GO con advertencia de hora
+  if (winRate >= 60) return 'GO_OOW'
   return 'CAUTION'
 }
 
 const SIG: Record<Signal, { bg: string; border: string; text: string; label: string; sub: string }> = {
-  GO:      { bg: 'bg-emerald-500/10', border: 'border-emerald-500', text: 'text-emerald-400', label: '🟢  GO',         sub: 'Condiciones históricamente favorables — entra' },
-  CAUTION: { bg: 'bg-amber-500/10',   border: 'border-amber-500',   text: 'text-amber-400',   label: '🟡  ESPERA',     sub: 'Condiciones mixtas — tamaño reducido o espera' },
-  NO:      { bg: 'bg-red-500/10',     border: 'border-red-500',     text: 'text-red-400',     label: '🔴  NO ENTRES',  sub: 'Probabilidad en tu contra — salta este trade' },
+  GO:      { bg: 'bg-emerald-500/10', border: 'border-emerald-500',      text: 'text-emerald-400', label: '🟢  GO',               sub: 'Pullback favorable + en ventana de hora — entra' },
+  GO_OOW:  { bg: 'bg-emerald-500/10', border: 'border-amber-400',        text: 'text-emerald-400', label: '🟢  GO  ⚠️',           sub: 'Pullback favorable pero fuera de ventana de hora — tamaño normal, sin agregar' },
+  CAUTION: { bg: 'bg-amber-500/10',   border: 'border-amber-500',        text: 'text-amber-400',   label: '🟡  ESPERA',           sub: 'Condiciones mixtas — espera mejor setup o reduce tamaño' },
+  NO:      { bg: 'bg-red-500/10',     border: 'border-red-500',          text: 'text-red-400',     label: '🔴  NO ENTRES',        sub: 'Probabilidad histórica en tu contra — salta este trade' },
 }
 
 const DAYS = [
@@ -70,9 +74,39 @@ export default function EnVivoPage() {
   if (loading) return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
       <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-      <p className="text-zinc-500 text-sm">Cargando datos históricos...</p>
+      <p className="text-zinc-500 text-sm">Cargando...</p>
     </div>
   )
+
+  // ── Pantalla pre-mercado: domingo antes de las 6PM ──
+  const isSunday  = now.getDay() === 0
+  const isTuesday = now.getDay() === 2
+  const hour      = now.getHours()
+  const minutes   = now.getMinutes()
+
+  if (activeDay === 'Dom' && isSunday && hour < 18) {
+    const minsLeft = (18 - hour - 1) * 60 + (60 - minutes)
+    const hLeft    = Math.floor(minsLeft / 60)
+    const mLeft    = minsLeft % 60
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70vh] gap-6 text-center">
+        <p className="text-6xl">⏳</p>
+        <div>
+          <p className="text-2xl font-black text-zinc-200">Aún no es hora</p>
+          <p className="text-zinc-500 mt-1">Mercado abre a las 6:00 PM</p>
+        </div>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-10 py-6">
+          <p className="text-5xl font-mono font-black text-emerald-400">
+            {hLeft}h {String(mLeft).padStart(2, '0')}m
+          </p>
+          <p className="text-xs text-zinc-500 mt-2">para el open</p>
+        </div>
+        <p className="text-xs text-zinc-600 max-w-xs">
+          Vuelve aquí cuando abra. Ten listo el nivel del open de NQ.
+        </p>
+      </div>
+    )
+  }
 
   // ── Cálculos ──
   const daySessions = sessions.filter(s => normDay(s.dia) === activeDay)
