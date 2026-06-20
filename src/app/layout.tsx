@@ -35,7 +35,7 @@ export default function RootLayout({
             <Link href="/" className="font-bold text-lg text-emerald-400">DYGPRO Analytics</Link>
             <div className="flex gap-6 text-sm">
               <Link href="/" className="text-zinc-400 hover:text-white transition">Dashboard</Link>
-              <Link href="/domingo" className="text-emerald-400 hover:text-emerald-300 font-semibold transition">⚡ Domingo</Link>
+              <Link href="/domingo" className="text-emerald-400 hover:text-emerald-300 font-semibold transition">⚡ En Vivo</Link>
               <Link href="/sesiones" className="text-zinc-400 hover:text-white transition">Sesiones</Link>
               <Link href="/importar" className="text-zinc-400 hover:text-white transition">Importar</Link>
               <Link href="/comparar" className="text-zinc-400 hover:text-white transition">Comparar</Link>
