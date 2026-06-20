@@ -8,7 +8,7 @@ import {
   calcStreaks, calcMaeMfe, calcHourStats,
   calcWeeklyPnl, calcTodayPnl, calcPullbackSim,
   calcDayProfiles, calcSkipDaySim, calcMonthlyByDay,
-  calcYearlyByDay, calcPullbackDepthBuckets, calcTopSessions,
+  calcYearlyByDay, calcPullbackDepthBuckets, calcTopSessions, calcHourMapByDay,
 } from '@/lib/calc'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -202,6 +202,8 @@ export default function Dashboard() {
   const domYearly   = calcYearlyByDay(filtered, 'Dom')
   const domBuckets  = calcPullbackDepthBuckets(filtered, 'Dom')
   const domTop      = calcTopSessions(filtered, 'Dom', 5)
+  const domHourHigh = calcHourMapByDay(filtered, 'Dom', 'hora_pico')
+  const domHourLow  = calcHourMapByDay(filtered, 'Dom', 'hora_baja')
   const peakDist    = calcPeakDistribution(filtered)
   const streaks     = calcStreaks(filtered)
   const maeMfe      = calcMaeMfe(filtered)
@@ -933,6 +935,83 @@ export default function Dashboard() {
                           )}
                         </div>
                         <span className="text-sm font-bold text-red-400">{s.cierre}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Horas pico y baja — solo domingos */}
+              <div className="mt-6">
+                <p className="text-sm font-semibold text-zinc-300 mb-1">⏰ ¿A qué hora ocurren el máximo y el mínimo?</p>
+                <p className="text-xs text-zinc-500 mb-4">Solo domingos — frecuencia por hora del día</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                  {/* Hora del HIGH */}
+                  <div>
+                    <p className="text-xs text-emerald-400 font-semibold mb-2">📈 Hora del Máximo (hora_pico)</p>
+                    <ResponsiveContainer width="100%" height={Math.max(domHourHigh.length * 28, 100)}>
+                      <BarChart data={domHourHigh} layout="vertical" margin={{ left: 8, right: 40 }}>
+                        <XAxis type="number" hide />
+                        <YAxis type="category" dataKey="hour" tick={{ fontSize: 11, fill: '#a1a1aa' }} width={44} />
+                        <Tooltip
+                          contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }}
+                          itemStyle={{ color: '#e4e4e7' }}
+                          labelStyle={{ color: '#a1a1aa' }}
+                          formatter={(v: unknown, name: unknown) => name === 'Sesiones' ? [`${v}`, 'Sesiones'] : [`${v}%`, '%']}
+                        />
+                        <Bar dataKey="count" name="Sesiones" fill="#10b981" radius={[0, 4, 4, 0]}>
+                          {domHourHigh.map((entry, i) => (
+                            <Cell key={i} fill={entry.avgPnl >= 0 ? '#10b981' : '#ef4444'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Hora del LOW */}
+                  <div>
+                    <p className="text-xs text-red-400 font-semibold mb-2">📉 Hora del Mínimo (hora_baja)</p>
+                    <ResponsiveContainer width="100%" height={Math.max(domHourLow.length * 28, 100)}>
+                      <BarChart data={domHourLow} layout="vertical" margin={{ left: 8, right: 40 }}>
+                        <XAxis type="number" hide />
+                        <YAxis type="category" dataKey="hour" tick={{ fontSize: 11, fill: '#a1a1aa' }} width={44} />
+                        <Tooltip
+                          contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }}
+                          itemStyle={{ color: '#e4e4e7' }}
+                          labelStyle={{ color: '#a1a1aa' }}
+                          formatter={(v: unknown, name: unknown) => name === 'Sesiones' ? [`${v}`, 'Sesiones'] : [`${v}%`, '%']}
+                        />
+                        <Bar dataKey="count" name="Sesiones" fill="#ef4444" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                </div>
+
+                {/* Top 3 horas resumen */}
+                <div className="mt-4 grid grid-cols-2 gap-4">
+                  <div className="bg-zinc-800 rounded-lg p-3">
+                    <p className="text-xs text-zinc-400 mb-2">Top horas del HIGH</p>
+                    {domHourHigh.slice(0, 3).map((h, i) => (
+                      <div key={i} className="flex justify-between text-xs py-0.5">
+                        <span className="text-zinc-300 font-mono">{h.hour}</span>
+                        <span className="text-zinc-400">{h.count} veces ({h.pct}%)</span>
+                        <span className={h.avgPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                          {h.avgPnl >= 0 ? '+' : ''}{h.avgPnl} avg
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="bg-zinc-800 rounded-lg p-3">
+                    <p className="text-xs text-zinc-400 mb-2">Top horas del LOW</p>
+                    {domHourLow.slice(0, 3).map((h, i) => (
+                      <div key={i} className="flex justify-between text-xs py-0.5">
+                        <span className="text-zinc-300 font-mono">{h.hour}</span>
+                        <span className="text-zinc-400">{h.count} veces ({h.pct}%)</span>
+                        <span className={h.avgPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                          {h.avgPnl >= 0 ? '+' : ''}{h.avgPnl} avg
+                        </span>
                       </div>
                     ))}
                   </div>

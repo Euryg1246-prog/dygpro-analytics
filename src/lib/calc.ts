@@ -432,6 +432,55 @@ export function calcPullbackDepthBuckets(sessions: Session[], dia?: string): Pul
   })
 }
 
+// ─── Distribución de horas pico y baja para un día específico ────────────────
+export interface HourSlot { hour: string; count: number; pct: number; avgPnl: number }
+
+export function calcHourMapByDay(
+  sessions: Session[],
+  dia: string,
+  field: 'hora_pico' | 'hora_baja'
+): HourSlot[] {
+  const normalize = (d: string) => {
+    const map: Record<string, string> = {
+      'Sun':'Dom','Mon':'Lun','Tue':'Mar','Wed':'Mié','Thu':'Jue','Fri':'Vie','Sat':'Sáb',
+      'Domingo':'Dom','Lunes':'Lun','Martes':'Mar',
+    }
+    return map[d] ?? d
+  }
+
+  const relevant = sessions.filter(s =>
+    normalize(s.dia) === dia && s[field] && s.cierre !== null
+  )
+
+  const map: Record<string, { count: number; pnl: number }> = {}
+  for (const s of relevant) {
+    const raw = s[field] as string
+    const h = parseInt(raw.split(':')[0])
+    // Agrupar en bloques de 1h, mostrar como "9AM", "10AM", etc.
+    const label = h === 0 ? '12AM' : h < 12 ? `${h}AM` : h === 12 ? '12PM' : `${h - 12}PM`
+    if (!map[label]) map[label] = { count: 0, pnl: 0 }
+    map[label].count++
+    map[label].pnl += s.cierre!
+  }
+
+  const total = relevant.length || 1
+
+  // Orden cronológico: medianoche primero, luego 1AM…11AM, 12PM, 1PM…
+  const order = [
+    '12AM','1AM','2AM','3AM','4AM','5AM','6AM','7AM','8AM','9AM','10AM','11AM',
+    '12PM','1PM','2PM','3PM','4PM','5PM','6PM','7PM','8PM','9PM','10PM','11PM',
+  ]
+
+  return order
+    .filter(h => map[h])
+    .map(h => ({
+      hour: h,
+      count: map[h].count,
+      pct: Math.round((map[h].count / total) * 100),
+      avgPnl: Math.round(map[h].pnl / map[h].count),
+    }))
+}
+
 // ─── Top mejores / peores sesiones de un día ─────────────────────────────────
 export function calcTopSessions(sessions: Session[], dia: string, n = 5): { best: Session[]; worst: Session[] } {
   const normalize = (d: string) => {
