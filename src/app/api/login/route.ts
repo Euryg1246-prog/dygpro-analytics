@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  if (password !== secret) {
+  if (password.trim() !== secret.trim()) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
