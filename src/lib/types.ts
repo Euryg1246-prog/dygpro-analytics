@@ -38,3 +38,26 @@ export interface KPIs {
   avgWin: number
   avgLoss: number
 }
+
+export interface Streaks {
+  currentStreak: number
+  currentStreakType: 'win' | 'loss' | 'none'
+  maxWinStreak: number
+  maxLossStreak: number
+}
+
+export interface MaeMfeStats {
+  avgRatio: number
+  avgEfficiency: number
+  countWithData: number
+  avgMfe: number
+  avgMae: number
+}
+
+export interface HourStat {
+  hour: string
+  trades: number
+  avgPnl: number
+  winRate: number
+  totalPnl: number
+}

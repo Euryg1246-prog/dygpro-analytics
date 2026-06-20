@@ -1,4 +1,4 @@
-import { Session, KPIs, DayStats } from './types'
+import { Session, KPIs, DayStats, Streaks, MaeMfeStats, HourStat } from './types'
 
 export function calcKPIs(sessions: Session[]): KPIs {
   if (sessions.length === 0) {
@@ -82,4 +82,104 @@ export function calcPeakDistribution(sessions: Session[]): { block: string; coun
     }).length
     return { block: b.label, count, pct: Math.round((count / total) * 100) }
   })
+}
+
+// ─── Rachas ───────────────────────────────────────────────────────────────────
+export function calcStreaks(sessions: Session[]): Streaks {
+  if (sessions.length === 0) {
+    return { currentStreak: 0, currentStreakType: 'none', maxWinStreak: 0, maxLossStreak: 0 }
+  }
+
+  let maxWinStreak = 0
+  let maxLossStreak = 0
+  let tempStreak = 0
+  let tempType: 'win' | 'loss' = 'win'
+
+  for (const s of sessions) {
+    const type: 'win' | 'loss' = (s.cierre ?? 0) >= 0 ? 'win' : 'loss'
+    if (type === tempType) {
+      tempStreak++
+    } else {
+      tempStreak = 1
+      tempType = type
+    }
+    if (type === 'win') maxWinStreak = Math.max(maxWinStreak, tempStreak)
+    else maxLossStreak = Math.max(maxLossStreak, tempStreak)
+  }
+
+  return {
+    currentStreak: tempStreak,
+    currentStreakType: tempType,
+    maxWinStreak,
+    maxLossStreak,
+  }
+}
+
+// ─── MAE / MFE ────────────────────────────────────────────────────────────────
+export function calcMaeMfe(sessions: Session[]): MaeMfeStats {
+  const withData = sessions.filter(s => s.max_alta !== null && s.baja !== null && s.cierre !== null)
+
+  if (withData.length === 0) {
+    return { avgRatio: 0, avgEfficiency: 0, countWithData: 0, avgMfe: 0, avgMae: 0 }
+  }
+
+  const avgMfe = withData.reduce((sum, s) => sum + (s.max_alta ?? 0), 0) / withData.length
+  const avgMae = withData.reduce((sum, s) => sum + Math.abs(s.baja ?? 0), 0) / withData.length
+
+  const ratios = withData.filter(s => s.mfe_mae !== null).map(s => s.mfe_mae!)
+  const avgRatio = ratios.length > 0 ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0
+
+  // Eficiencia: cuánto del MFE capturaste al cerrar
+  const efficiencies = withData
+    .filter(s => (s.max_alta ?? 0) > 0)
+    .map(s => Math.min(((s.cierre ?? 0) / (s.max_alta ?? 1)) * 100, 100))
+  const avgEfficiency = efficiencies.length > 0
+    ? efficiencies.reduce((a, b) => a + b, 0) / efficiencies.length
+    : 0
+
+  return { avgRatio, avgEfficiency, countWithData: withData.length, avgMfe, avgMae }
+}
+
+// ─── P&L por hora de entrada ──────────────────────────────────────────────────
+export function calcHourStats(sessions: Session[]): HourStat[] {
+  const hourMap: Record<string, { pnl: number[]; wins: number }> = {}
+
+  for (const s of sessions) {
+    if (!s.hora_baja || s.cierre === null) continue
+    const hour = s.hora_baja.substring(0, 2) + ':00'
+    if (!hourMap[hour]) hourMap[hour] = { pnl: [], wins: 0 }
+    hourMap[hour].pnl.push(s.cierre)
+    if (s.cierre >= 0) hourMap[hour].wins++
+  }
+
+  return Object.entries(hourMap)
+    .map(([hour, data]) => ({
+      hour,
+      trades: data.pnl.length,
+      avgPnl: Math.round(data.pnl.reduce((a, b) => a + b, 0) / data.pnl.length),
+      winRate: Math.round((data.wins / data.pnl.length) * 100),
+      totalPnl: Math.round(data.pnl.reduce((a, b) => a + b, 0)),
+    }))
+    .sort((a, b) => a.hour.localeCompare(b.hour))
+}
+
+// ─── Meta semanal ─────────────────────────────────────────────────────────────
+export function calcWeeklyPnl(sessions: Session[]): number {
+  const now = new Date()
+  const dayOfWeek = now.getDay() // 0=Sun
+  const monday = new Date(now)
+  monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
+  monday.setHours(0, 0, 0, 0)
+  const weekStart = monday.toISOString().slice(0, 10)
+
+  return sessions
+    .filter(s => s.fecha >= weekStart)
+    .reduce((sum, s) => sum + (s.cierre ?? 0), 0)
+}
+
+export function calcTodayPnl(sessions: Session[]): number {
+  const today = new Date().toISOString().slice(0, 10)
+  return sessions
+    .filter(s => s.fecha === today)
+    .reduce((sum, s) => sum + (s.cierre ?? 0), 0)
 }
