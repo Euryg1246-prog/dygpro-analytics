@@ -157,7 +157,7 @@ export default function Dashboard() {
               <Tooltip
                 contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }}
                 labelStyle={{ color: '#a1a1aa' }}
-                formatter={(v: number) => [(v >= 0 ? '+' : '') + v.toLocaleString(), 'P&L']}
+                formatter={(v: unknown) => { const n = v as number; return [(n >= 0 ? '+' : '') + n.toLocaleString(), 'P&L'] }}
               />
               <Line type="monotone" dataKey="acumulado" stroke="#10b981" strokeWidth={2} dot={false} />
             </LineChart>
