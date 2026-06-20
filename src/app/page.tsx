@@ -158,8 +158,17 @@ export default function Dashboard() {
     localStorage.removeItem('dygpro_to')
   }
 
-  // Filtro de día — global, afecta todo el dashboard
-  const [filterDay, setFilterDay] = useState<string>('Todos')
+  // Filtro de día — multi-select, afecta todo el dashboard
+  const [filterDays, setFilterDays] = useState<Set<string>>(new Set())
+
+  const toggleDay = (d: string) => {
+    if (d === 'Todos') { setFilterDays(new Set()); return }
+    setFilterDays(prev => {
+      const next = new Set(prev)
+      if (next.has(d)) next.delete(d); else next.add(d)
+      return next
+    })
+  }
 
   useEffect(() => {
     setLoading(true)
@@ -189,7 +198,7 @@ export default function Dashboard() {
   const filtered = sessions.filter(s => {
     if (filterFrom && s.fecha < filterFrom) return false
     if (filterTo && s.fecha > filterTo) return false
-    if (filterDay !== 'Todos' && normDay(s.dia) !== filterDay) return false
+    if (filterDays.size > 0 && !filterDays.has(normDay(s.dia))) return false
     return true
   })
 
@@ -252,7 +261,7 @@ export default function Dashboard() {
   const streakColor = streaks.currentStreakType === 'win' ? 'text-emerald-400' : streaks.currentStreakType === 'loss' ? 'text-red-400' : 'text-zinc-400'
   const streakEmoji = streaks.currentStreakType === 'win' ? '🔥' : '❄️'
 
-  const isFiltered = filterFrom || filterTo || filterDay !== 'Todos'
+  const isFiltered = filterFrom || filterTo || filterDays.size > 0
 
   return (
     <div className="space-y-6">
@@ -278,7 +287,7 @@ export default function Dashboard() {
             />
             {isFiltered && (
               <button
-                onClick={() => { handleClear(); setFilterDay('Todos') }}
+                onClick={() => { handleClear(); setFilterDays(new Set()) }}
                 className="text-xs text-zinc-400 hover:text-white bg-zinc-800 border border-zinc-700 rounded px-2 py-1 transition-colors"
               >
                 ✕ limpiar
@@ -286,28 +295,31 @@ export default function Dashboard() {
             )}
           </div>
         </div>
-        {/* Fila 2: filtro de día — afecta TODOS los KPIs y gráficas */}
+        {/* Fila 2: filtro de día — multi-select, afecta TODOS los KPIs y gráficas */}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-zinc-500">Día:</span>
-          {FILTER_DAYS.map(d => (
-            <button
-              key={d}
-              onClick={() => setFilterDay(d)}
-              className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
-                filterDay === d
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
-              }`}
-            >
-              {d}
-            </button>
-          ))}
+          {FILTER_DAYS.map(d => {
+            const active = d === 'Todos' ? filterDays.size === 0 : filterDays.has(d)
+            return (
+              <button
+                key={d}
+                onClick={() => toggleDay(d)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                  active
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
+                }`}
+              >
+                {d}
+              </button>
+            )
+          })}
         </div>
       </div>
       {isFiltered && (
         <p className="text-xs text-amber-400/70">
           Mostrando {filtered.length} de {sessions.length} sesiones
-          {filterDay !== 'Todos' ? ` · Solo ${filterDay}` : ''}
+          {filterDays.size > 0 ? ` · ${[...filterDays].join(' + ')}` : ''}
           {filterFrom ? ` · desde ${filterFrom}` : ''}
           {filterTo ? ` · hasta ${filterTo}` : ''}
         </p>
@@ -358,7 +370,7 @@ export default function Dashboard() {
       <Card className="bg-zinc-900 border-zinc-800">
         <CardHeader>
           <CardTitle>Equity Curve — P&L Acumulado</CardTitle>
-          <p className="text-xs text-zinc-500 mt-0.5">{filtered.length} sesiones · {filterDay !== 'Todos' ? `Solo ${filterDay}` : 'Todos los días'}</p>
+          <p className="text-xs text-zinc-500 mt-0.5">{filtered.length} sesiones · {filterDays.size > 0 ? [...filterDays].join(' + ') : 'Todos los días'}</p>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={280}>
