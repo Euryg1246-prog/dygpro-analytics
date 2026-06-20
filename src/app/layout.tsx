@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { LogoutButton } from "@/components/LogoutButton";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -38,6 +39,9 @@ export default function RootLayout({
               <Link href="/importar" className="text-zinc-400 hover:text-white transition">Importar</Link>
               <Link href="/comparar" className="text-zinc-400 hover:text-white transition">Comparar</Link>
               <Link href="/webhook" className="text-zinc-400 hover:text-white transition">Webhook</Link>
+            </div>
+            <div className="ml-auto">
+              <LogoutButton />
             </div>
           </div>
         </nav>
