@@ -34,18 +34,23 @@ export function calcKPIs(sessions: Session[]): KPIs {
 }
 
 export function calcDayStats(sessions: Session[]): DayStats[] {
-  const days = ['Dom', 'Lun', 'Mar']
+  // Orden canónico — se muestran solo los días que aparecen en los datos
+  const DAY_ORDER = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
   const dayMap: Record<string, string> = {
-    'Sun': 'Dom', 'Mon': 'Lun', 'Tue': 'Mar',
-    'Domingo': 'Dom', 'Lunes': 'Lun', 'Martes': 'Mar',
-    'Dom': 'Dom', 'Lun': 'Lun', 'Mar': 'Mar',
+    'Sun': 'Dom', 'Mon': 'Lun', 'Tue': 'Mar', 'Wed': 'Mié',
+    'Thu': 'Jue', 'Fri': 'Vie', 'Sat': 'Sáb',
+    'Domingo': 'Dom', 'Lunes': 'Lun', 'Martes': 'Mar', 'Miércoles': 'Mié',
+    'Jueves': 'Jue', 'Viernes': 'Vie', 'Sábado': 'Sáb',
+    'Dom': 'Dom', 'Lun': 'Lun', 'Mar': 'Mar', 'Mié': 'Mié',
+    'Jue': 'Jue', 'Vie': 'Vie', 'Sáb': 'Sáb',
   }
 
+  // Detectar qué días hay en los datos
+  const presentDays = new Set(sessions.map(s => dayMap[s.dia] ?? s.dia))
+  const days = DAY_ORDER.filter(d => presentDays.has(d))
+
   return days.map(dia => {
-    const daySessions = sessions.filter(s => {
-      const mapped = dayMap[s.dia] || s.dia
-      return mapped === dia
-    })
+    const daySessions = sessions.filter(s => (dayMap[s.dia] ?? s.dia) === dia)
     const wins = daySessions.filter(s => (s.cierre ?? 0) >= 0)
     const totalPts = daySessions.reduce((sum, s) => sum + (s.cierre ?? 0), 0)
 
