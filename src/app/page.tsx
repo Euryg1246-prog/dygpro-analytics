@@ -158,8 +158,8 @@ export default function Dashboard() {
     localStorage.removeItem('dygpro_to')
   }
 
-  // Equity curve filtrable — hook debe ir ANTES de cualquier early return
-  const [equityDay, setEquityDay] = useState<string>('Todos')
+  // Filtro de día — global, afecta todo el dashboard
+  const [filterDay, setFilterDay] = useState<string>('Todos')
 
   useEffect(() => {
     setLoading(true)
@@ -177,10 +177,19 @@ export default function Dashboard() {
 
   if (loading) return <div className="text-zinc-500 text-center py-20">Cargando...</div>
 
-  // Filtrar por rango de fechas
+  const normDay = (d: string) => {
+    const map: Record<string, string> = {
+      'Sun':'Dom','Mon':'Lun','Tue':'Mar','Wed':'Mié','Thu':'Jue','Fri':'Vie','Sat':'Sáb',
+      'Domingo':'Dom','Lunes':'Lun','Martes':'Mar',
+    }
+    return map[d] ?? d
+  }
+
+  // Filtrar por rango de fechas + día seleccionado
   const filtered = sessions.filter(s => {
     if (filterFrom && s.fecha < filterFrom) return false
     if (filterTo && s.fecha > filterTo) return false
+    if (filterDay !== 'Todos' && normDay(s.dia) !== filterDay) return false
     return true
   })
 
@@ -213,24 +222,11 @@ export default function Dashboard() {
   const hourStats   = calcHourStats(filtered)
   const pullbackSim = calcPullbackSim(filtered)
 
-  // Equity curve — filtrable por día
-  const EQUITY_DAYS = ['Todos', 'Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+  const FILTER_DAYS = ['Todos', 'Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
-  const normalize = (d: string) => {
-    const map: Record<string, string> = {
-      'Sun':'Dom','Mon':'Lun','Tue':'Mar','Wed':'Mié','Thu':'Jue','Fri':'Vie','Sat':'Sáb',
-      'Domingo':'Dom','Lunes':'Lun','Martes':'Mar',
-    }
-    return map[d] ?? d
-  }
-
-  const equityFiltered = equityDay === 'Todos'
-    ? filtered
-    : filtered.filter(s => normalize(s.dia) === equityDay)
-
-  const cumData = equityFiltered.map((s, i) => ({
+  const cumData = filtered.map((s, i) => ({
     fecha: s.fecha.slice(5),
-    acumulado: Math.round(equityFiltered.slice(0, i + 1).reduce((sum, ss) => sum + (ss.cierre ?? 0), 0)),
+    acumulado: Math.round(filtered.slice(0, i + 1).reduce((sum, ss) => sum + (ss.cierre ?? 0), 0)),
   }))
 
   // P&L por fecha individual
@@ -256,43 +252,64 @@ export default function Dashboard() {
   const streakColor = streaks.currentStreakType === 'win' ? 'text-emerald-400' : streaks.currentStreakType === 'loss' ? 'text-red-400' : 'text-zinc-400'
   const streakEmoji = streaks.currentStreakType === 'win' ? '🔥' : '❄️'
 
-  const isFiltered = filterFrom || filterTo
+  const isFiltered = filterFrom || filterTo || filterDay !== 'Todos'
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3 flex-wrap">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <StrategySelector value={strategy} onChange={handleStrategy} />
-        <div className="flex items-center gap-2 ml-auto">
-          <span className="text-xs text-zinc-500">Desde</span>
-          <input
-            type="date"
-            value={filterFrom}
-            onChange={e => handleFrom(e.target.value)}
-            className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-zinc-500"
-          />
-          <span className="text-xs text-zinc-500">Hasta</span>
-          <input
-            type="date"
-            value={filterTo}
-            onChange={e => handleTo(e.target.value)}
-            className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-zinc-500"
-          />
-          {isFiltered && (
+      <div className="flex flex-col gap-3">
+        {/* Fila 1: título + estrategia + fechas */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <StrategySelector value={strategy} onChange={handleStrategy} />
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
+            <span className="text-xs text-zinc-500">Desde</span>
+            <input
+              type="date"
+              value={filterFrom}
+              onChange={e => handleFrom(e.target.value)}
+              className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-zinc-500"
+            />
+            <span className="text-xs text-zinc-500">Hasta</span>
+            <input
+              type="date"
+              value={filterTo}
+              onChange={e => handleTo(e.target.value)}
+              className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-zinc-500"
+            />
+            {isFiltered && (
+              <button
+                onClick={() => { handleClear(); setFilterDay('Todos') }}
+                className="text-xs text-zinc-400 hover:text-white bg-zinc-800 border border-zinc-700 rounded px-2 py-1 transition-colors"
+              >
+                ✕ limpiar
+              </button>
+            )}
+          </div>
+        </div>
+        {/* Fila 2: filtro de día — afecta TODOS los KPIs y gráficas */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-zinc-500">Día:</span>
+          {FILTER_DAYS.map(d => (
             <button
-              onClick={handleClear}
-              className="text-xs text-zinc-400 hover:text-white bg-zinc-800 border border-zinc-700 rounded px-2 py-1 transition-colors"
+              key={d}
+              onClick={() => setFilterDay(d)}
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                filterDay === d
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
+              }`}
             >
-              ✕ limpiar
+              {d}
             </button>
-          )}
+          ))}
         </div>
       </div>
       {isFiltered && (
         <p className="text-xs text-amber-400/70">
           Mostrando {filtered.length} de {sessions.length} sesiones
-          {filterFrom ? ` desde ${filterFrom}` : ''}
-          {filterTo ? ` hasta ${filterTo}` : ''}
+          {filterDay !== 'Todos' ? ` · Solo ${filterDay}` : ''}
+          {filterFrom ? ` · desde ${filterFrom}` : ''}
+          {filterTo ? ` · hasta ${filterTo}` : ''}
         </p>
       )}
 
@@ -340,29 +357,8 @@ export default function Dashboard() {
       {/* Equity Curve */}
       <Card className="bg-zinc-900 border-zinc-800">
         <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <CardTitle>Equity Curve — P&L Acumulado</CardTitle>
-              <p className="text-xs text-zinc-500 mt-0.5">
-                {equityDay === 'Todos' ? 'Todos los días' : `Solo ${equityDay}`} · {equityFiltered.length} sesiones
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {EQUITY_DAYS.map(d => (
-                <button
-                  key={d}
-                  onClick={() => setEquityDay(d)}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
-                    equityDay === d
-                      ? 'bg-emerald-500 text-white'
-                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
-                  }`}
-                >
-                  {d}
-                </button>
-              ))}
-            </div>
-          </div>
+          <CardTitle>Equity Curve — P&L Acumulado</CardTitle>
+          <p className="text-xs text-zinc-500 mt-0.5">{filtered.length} sesiones · {filterDay !== 'Todos' ? `Solo ${filterDay}` : 'Todos los días'}</p>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={280}>
