@@ -31,17 +31,17 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-100">
         <nav className="border-b border-zinc-800 bg-zinc-900/80 backdrop-blur sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto px-4 flex items-center gap-8 h-14">
-            <Link href="/" className="font-bold text-lg text-emerald-400">DYGPRO Analytics</Link>
-            <div className="flex gap-6 text-sm">
-              <Link href="/" className="text-zinc-400 hover:text-white transition">Dashboard</Link>
-              <Link href="/domingo" className="text-emerald-400 hover:text-emerald-300 font-semibold transition">⚡ En Vivo</Link>
-              <Link href="/sesiones" className="text-zinc-400 hover:text-white transition">Sesiones</Link>
-              <Link href="/importar" className="text-zinc-400 hover:text-white transition">Importar</Link>
-              <Link href="/comparar" className="text-zinc-400 hover:text-white transition">Comparar</Link>
-              <Link href="/webhook" className="text-zinc-400 hover:text-white transition">Webhook</Link>
+          <div className="max-w-7xl mx-auto px-4 flex items-center h-14 gap-4">
+            <Link href="/" className="font-bold text-base text-emerald-400 shrink-0">DYGPRO</Link>
+            <div className="flex gap-1 text-xs overflow-x-auto scrollbar-none flex-1">
+              <Link href="/" className="text-zinc-400 hover:text-white transition px-2 py-1 rounded-lg hover:bg-zinc-800 whitespace-nowrap">Dashboard</Link>
+              <Link href="/domingo" className="text-emerald-400 font-semibold transition px-2 py-1 rounded-lg bg-emerald-500/10 whitespace-nowrap">⚡ En Vivo</Link>
+              <Link href="/sesiones" className="text-zinc-400 hover:text-white transition px-2 py-1 rounded-lg hover:bg-zinc-800 whitespace-nowrap">Sesiones</Link>
+              <Link href="/importar" className="text-zinc-400 hover:text-white transition px-2 py-1 rounded-lg hover:bg-zinc-800 whitespace-nowrap">Importar</Link>
+              <Link href="/comparar" className="text-zinc-400 hover:text-white transition px-2 py-1 rounded-lg hover:bg-zinc-800 whitespace-nowrap">Comparar</Link>
+              <Link href="/webhook" className="text-zinc-400 hover:text-white transition px-2 py-1 rounded-lg hover:bg-zinc-800 whitespace-nowrap hidden md:block">Webhook</Link>
             </div>
-            <div className="ml-auto">
+            <div className="shrink-0">
               <LogoutButton />
             </div>
           </div>

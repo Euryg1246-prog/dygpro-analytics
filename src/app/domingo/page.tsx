@@ -247,10 +247,13 @@ export default function EnVivoPage() {
             </p>
             {hourLowNow
               ? <p className="text-xs text-zinc-500 mt-1">
-                  Low ocurre a esta hora en el <span className="font-semibold text-zinc-300">{hourLowNow.pct}%</span> de los {isDom ? 'domingos' : 'martes'}
-                  {hourHighNow ? ` · high: ${hourHighNow.pct}%` : ''}
+                  Low aquí el <span className="font-semibold text-zinc-300">{hourLowNow.pct}%</span> de las veces
+                  {hourHighNow ? ` · high el ${hourHighNow.pct}%` : ''}
                 </p>
-              : <p className="text-xs text-zinc-600 mt-1">Sin datos para esta hora</p>
+              : <p className="text-xs text-zinc-600 mt-1">
+                  Esta hora no es frecuente para el low
+                  {nextWindow ? ` · espera hasta ${nextWindow.hour}` : ''}
+                </p>
             }
           </div>
           <span className="text-xs font-mono bg-zinc-800 px-2 py-1 rounded-lg text-zinc-400 shrink-0">{hourNow}</span>
