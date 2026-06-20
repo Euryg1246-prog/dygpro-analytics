@@ -48,12 +48,34 @@ const DAYS = [
   { key: 'Mar', label: '📈 Martes'  },
 ]
 
+interface SignalLog {
+  id: string
+  dia: string
+  fecha: string
+  hora: string
+  pullback_pts: number
+  signal: string
+  en_ventana: boolean
+  entro: boolean | null
+  outcome_pts: number | null
+  notas: string | null
+  created_at: string
+}
+
 export default function EnVivoPage() {
   const [sessions, setSessions]   = useState<Session[]>([])
   const [loading, setLoading]     = useState(true)
   const [activeDay, setActiveDay] = useState<string>('Dom')
   const [pullback, setPullback]   = useState<string>('')
   const [now, setNow]             = useState(new Date())
+
+  // Log de señales
+  const [signalLogs, setSignalLogs]     = useState<SignalLog[]>([])
+  const [logSaved, setLogSaved]         = useState(false)
+  const [logEntro, setLogEntro]         = useState<boolean | null>(null)
+  const [logOutcome, setLogOutcome]     = useState<string>('')
+  const [savingLog, setSavingLog]       = useState(false)
+  const [pendingLogId, setPendingLogId] = useState<string | null>(null)
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 10_000)
@@ -70,6 +92,12 @@ export default function EnVivoPage() {
         setLoading(false)
       })
   }, [])
+
+  useEffect(() => {
+    fetch('/api/signals')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setSignalLogs(data) })
+  }, [logSaved])
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
@@ -376,6 +404,139 @@ export default function EnVivoPage() {
           <p className="text-xs text-zinc-500">{daySessions.length} sesiones</p>
         </div>
       </div>
+
+      {/* ── Log de decisión ── */}
+      {matched && signal !== 'CAUTION' && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+          <p className="text-sm font-semibold text-zinc-300">📝 Registrar esta señal</p>
+
+          {!pendingLogId && !logSaved && (
+            <>
+              <p className="text-xs text-zinc-500">¿Entraste al trade?</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={async () => {
+                    setSavingLog(true)
+                    const fechaHoy = now.toISOString().slice(0, 10)
+                    const res = await fetch('/api/signals', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        dia: activeDay, fecha: fechaHoy, hora: toHourLabel(now.getHours()),
+                        pullback_pts: pts, signal, en_ventana: inWindow, entro: true,
+                      }),
+                    })
+                    const d = await res.json()
+                    setPendingLogId(d.id)
+                    setLogEntro(true)
+                    setSavingLog(false)
+                  }}
+                  disabled={savingLog}
+                  className="py-3 rounded-xl bg-emerald-500/15 border border-emerald-500/50 text-emerald-400 font-bold text-sm active:bg-emerald-500/30"
+                >
+                  ✅ Sí, entré
+                </button>
+                <button
+                  onClick={async () => {
+                    setSavingLog(true)
+                    const fechaHoy = now.toISOString().slice(0, 10)
+                    await fetch('/api/signals', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        dia: activeDay, fecha: fechaHoy, hora: toHourLabel(now.getHours()),
+                        pullback_pts: pts, signal, en_ventana: inWindow, entro: false,
+                      }),
+                    })
+                    setLogSaved(true)
+                    setSavingLog(false)
+                  }}
+                  disabled={savingLog}
+                  className="py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-400 font-bold text-sm active:bg-zinc-700"
+                >
+                  ❌ No entré
+                </button>
+              </div>
+            </>
+          )}
+
+          {pendingLogId && !logSaved && (
+            <>
+              <p className="text-xs text-zinc-500">¿Cuántos puntos resultó? (llena después del trade)</p>
+              <div className="flex gap-3">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="+150 o -80"
+                  value={logOutcome}
+                  onChange={e => setLogOutcome(e.target.value)}
+                  className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-xl font-mono font-bold text-zinc-100 focus:outline-none focus:border-emerald-500"
+                />
+                <button
+                  onClick={async () => {
+                    if (!logOutcome) return
+                    setSavingLog(true)
+                    await fetch('/api/signals', {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ id: pendingLogId, outcome_pts: parseFloat(logOutcome) }),
+                    })
+                    setLogSaved(true)
+                    setPendingLogId(null)
+                    setSavingLog(false)
+                  }}
+                  disabled={savingLog || !logOutcome}
+                  className="px-4 py-3 rounded-xl bg-emerald-500 text-white font-bold text-sm disabled:opacity-40"
+                >
+                  Guardar
+                </button>
+              </div>
+              <button onClick={() => setLogSaved(true)} className="text-xs text-zinc-600 hover:text-zinc-400">
+                Llenar después →
+              </button>
+            </>
+          )}
+
+          {logSaved && (
+            <div className="text-center py-2">
+              <p className="text-emerald-400 font-semibold">✓ Señal registrada</p>
+              <button
+                onClick={() => { setLogSaved(false); setPendingLogId(null); setLogEntro(null); setLogOutcome('') }}
+                className="text-xs text-zinc-600 hover:text-zinc-400 mt-1"
+              >
+                Registrar otra
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Historial de señales ── */}
+      {signalLogs.length > 0 && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+          <p className="text-xs font-semibold text-zinc-400 mb-3">🗂 Últimas señales registradas</p>
+          <div className="space-y-2">
+            {signalLogs.slice(0, 8).map(l => (
+              <div key={l.id} className="flex items-center gap-2 text-xs py-1.5 border-b border-zinc-800 last:border-0">
+                <span className="text-zinc-500 font-mono w-20 shrink-0">{l.fecha}</span>
+                <span className={`font-mono shrink-0 ${l.signal === 'GO' ? 'text-emerald-400' : l.signal === 'GO_OOW' ? 'text-amber-400' : 'text-red-400'}`}>
+                  {l.signal === 'GO' ? '🟢' : l.signal === 'GO_OOW' ? '🟢⚠️' : l.signal === 'NO' ? '🔴' : '🟡'}
+                </span>
+                <span className="text-zinc-400 shrink-0">{l.pullback_pts}pts</span>
+                <span className="text-zinc-600 shrink-0">{l.entro ? 'Entró' : 'No entró'}</span>
+                {l.outcome_pts !== null && (
+                  <span className={`font-mono font-bold ml-auto shrink-0 ${l.outcome_pts >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {l.outcome_pts >= 0 ? '+' : ''}{l.outcome_pts}
+                  </span>
+                )}
+                {l.outcome_pts === null && l.entro && (
+                  <span className="text-zinc-600 ml-auto text-xs">pendiente</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
     </div>
   )
