@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Session } from '@/lib/types'
 import {
@@ -130,12 +131,31 @@ function GoalTracker({ sessions }: { sessions: Session[] }) {
 }
 
 // ─── Dashboard principal ──────────────────────────────────────────────────────
-export default function Dashboard() {
+function Dashboard() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Leer estado inicial desde URL params → persiste en refresh y es compartible
   const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
-  const [strategy, setStrategy] = useState('session_edge')
-  const [filterFrom, setFilterFrom] = useState('')
-  const [filterTo, setFilterTo] = useState('')
+  const [strategy, setStrategy] = useState(() => searchParams.get('s') ?? 'session_edge')
+  const [filterFrom, setFilterFrom] = useState(() => searchParams.get('from') ?? '')
+  const [filterTo, setFilterTo] = useState(() => searchParams.get('to') ?? '')
+
+  // Sincronizar estado → URL
+  const updateUrl = useCallback((s: string, from: string, to: string) => {
+    const params = new URLSearchParams()
+    if (s !== 'session_edge') params.set('s', s)
+    if (from) params.set('from', from)
+    if (to) params.set('to', to)
+    const qs = params.toString()
+    router.replace(qs ? `/?${qs}` : '/', { scroll: false })
+  }, [router])
+
+  const handleStrategy = (v: string) => { setStrategy(v); updateUrl(v, filterFrom, filterTo) }
+  const handleFrom    = (v: string) => { setFilterFrom(v); updateUrl(strategy, v, filterTo) }
+  const handleTo      = (v: string) => { setFilterTo(v); updateUrl(strategy, filterFrom, v) }
+  const handleClear   = () => { setFilterFrom(''); setFilterTo(''); updateUrl(strategy, '', '') }
 
   useEffect(() => {
     setLoading(true)
@@ -218,25 +238,25 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div className="flex items-center gap-3 flex-wrap">
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <StrategySelector value={strategy} onChange={setStrategy} />
+        <StrategySelector value={strategy} onChange={handleStrategy} />
         <div className="flex items-center gap-2 ml-auto">
           <span className="text-xs text-zinc-500">Desde</span>
           <input
             type="date"
             value={filterFrom}
-            onChange={e => setFilterFrom(e.target.value)}
+            onChange={e => handleFrom(e.target.value)}
             className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-zinc-500"
           />
           <span className="text-xs text-zinc-500">Hasta</span>
           <input
             type="date"
             value={filterTo}
-            onChange={e => setFilterTo(e.target.value)}
+            onChange={e => handleTo(e.target.value)}
             className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-zinc-500"
           />
           {isFiltered && (
             <button
-              onClick={() => { setFilterFrom(''); setFilterTo('') }}
+              onClick={handleClear}
               className="text-xs text-zinc-400 hover:text-white bg-zinc-800 border border-zinc-700 rounded px-2 py-1 transition-colors"
             >
               ✕ limpiar
@@ -825,5 +845,18 @@ function StrategySelector({ value, onChange }: { value: string; onChange: (v: st
         <option key={s.value} value={s.value}>{s.label}</option>
       ))}
     </select>
+  )
+}
+
+// Wrapper con Suspense requerido por useSearchParams en Next.js App Router
+function DashboardInner() {
+  return <Dashboard />
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="text-zinc-500 text-center py-20">Cargando...</div>}>
+      <DashboardInner />
+    </Suspense>
   )
 }

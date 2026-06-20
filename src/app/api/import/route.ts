@@ -8,12 +8,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No sessions provided' }, { status: 400 })
   }
 
+  // Deduplicar por (strategy, fecha) antes del upsert
+  // Postgres falla si la misma clave aparece dos veces en el mismo batch
+  const seen = new Set<string>()
+  const deduped = sessions.filter((s: { strategy: string; fecha: string }) => {
+    const key = `${s.strategy}|${s.fecha}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
   const { data, error } = await supabase
     .from('sessions')
-    .upsert(sessions, { onConflict: 'strategy,fecha' })
+    .upsert(deduped, { onConflict: 'strategy,fecha' })
     .select()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ imported: data?.length ?? 0 })
+  const skipped = sessions.length - deduped.length
+  return NextResponse.json({ imported: data?.length ?? 0, skipped })
 }
