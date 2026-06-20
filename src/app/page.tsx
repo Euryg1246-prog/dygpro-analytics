@@ -158,6 +158,9 @@ export default function Dashboard() {
     localStorage.removeItem('dygpro_to')
   }
 
+  // Equity curve filtrable — hook debe ir ANTES de cualquier early return
+  const [equityDay, setEquityDay] = useState<string>('Todos')
+
   useEffect(() => {
     setLoading(true)
     fetch(`/api/sessions?strategy=${strategy}`)
@@ -211,8 +214,6 @@ export default function Dashboard() {
   const pullbackSim = calcPullbackSim(filtered)
 
   // Equity curve — filtrable por día
-  const [equityDay, setEquityDay] = useState<string>('Todos')
-
   const EQUITY_DAYS = ['Todos', 'Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
   const normalize = (d: string) => {
