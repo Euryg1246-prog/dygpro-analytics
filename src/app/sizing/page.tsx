@@ -29,26 +29,50 @@ const WR_MATRIX: Record<string, Record<number, number>> = {
   Vie: { 9:56, 10:60, 11:44, 12:60, 13:73, 14:57, 15:58, 16:50 },
 }
 
-// ── Reglas de sizing ──────────────────────────────────────────────────────────
-// Base: 10 MNQ ($2/pt por contrato → $20/pt total → riesgo $1,000 por SL 50pts)
-const BASE = 10
+// ── Reglas de sizing (números reales acordados) ───────────────────────────────
+//
+// BK Breakout v4:
+//   Días normales    → 5 MNQ  (riesgo $500 por SL 50pts)
+//   Martes           → 10 MNQ (día limpio, doble tamaño)
+//   Martes slot top  → 15 MNQ (Martes + WR≥65% + EV≥$1,500)
+//   Slot negativo    → 0 MNQ  (pausar automación)
+//
+// SE Session Edge:
+//   Base / Martes    → 1 MNQ  (siempre fue así)
+//   Dom pullback ok  → 2 MNQ  (50-100pts, WR moderado)
+//   Dom pullback top → 3 MNQ  (100-150pts, sweet spot)
+//   Dom pullback max → 4 MNQ  (solo si WR>70% Y en ventana de hora)
+//   Pullback >150pts → 0 MNQ  (probabilidad se invierte)
+
+const BK_BASE    = 5
+const BK_MAR     = 10
+const BK_MAR_TOP = 15
+const SE_BASE    = 1
+const SE_DOM_OK  = 2
+const SE_DOM_TOP = 3
+const SE_DOM_MAX = 4
 
 function getBKSize(day: string, hour: number): { size: number; label: string; reason: string } {
   const isPause = (PAUSE_SLOTS[day] ?? []).includes(hour)
   if (isPause) return { size: 0, label: '0 MNQ', reason: `${day} ${hour}h = slot negativo histórico — PAUSAR automación` }
-  if (day === 'Mar') return { size: BASE * 2, label: `${BASE * 2} MNQ`, reason: 'Martes = único día sin hora mala en 7 años — máximo tamaño' }
-  const ev = EV_MATRIX[day]?.[hour]
-  const wr = WR_MATRIX[day]?.[hour]
-  if (ev && wr && ev.avg >= 1500 && wr >= 65) return { size: BASE * 1.5, label: `${BASE * 1.5} MNQ`, reason: `${day} ${hour}h WR ${wr}% + EV $${ev.avg.toLocaleString()} — slot premium` }
-  return { size: BASE, label: `${BASE} MNQ`, reason: `${day} ${hour}h = slot válido, tamaño base` }
+  if (day === 'Mar') {
+    const ev = EV_MATRIX['Mar']?.[hour]
+    const wr = WR_MATRIX['Mar']?.[hour]
+    if (ev && wr && ev.avg >= 1500 && wr >= 65)
+      return { size: BK_MAR_TOP, label: `${BK_MAR_TOP} MNQ`, reason: `Mar ${hour}h WR ${wr}% + EV $${ev.avg.toLocaleString()} — slot top de Martes` }
+    return { size: BK_MAR, label: `${BK_MAR} MNQ`, reason: 'Martes = único día sin hora mala en 7 años — tamaño doble' }
+  }
+  return { size: BK_BASE, label: `${BK_BASE} MNQ`, reason: `${day} ${hour}h = slot válido, tamaño base` }
 }
 
 function getSESize(pullbackPts: number, day: string): { size: number; label: string; reason: string; action: string } {
   if (pullbackPts === 0) return { size: 0, label: '—', reason: 'Introduce el pullback para calcular', action: 'ESPERAR' }
-  if (pullbackPts < 50) return { size: 0, label: '0 MNQ', reason: 'Pullback muy pequeño — setup sin confirmar', action: 'ESPERAR' }
+  if (pullbackPts < 50) return { size: SE_BASE, label: `${SE_BASE} MNQ`, reason: 'Pullback pequeño — setup débil, mínimo tamaño', action: 'ESPERAR' }
   if (pullbackPts > 150) return { size: 0, label: '0 MNQ', reason: 'Más de 150pts = probabilidad se INVIERTE históricamente', action: 'NO ENTRAR' }
-  if (pullbackPts >= 100 && day === 'Dom') return { size: BASE * 1.5, label: `${BASE * 1.5} MNQ`, reason: 'Pullback fuerte (100-150pts) en Domingo = WR más alto — tamaño premium', action: 'GO +50%' }
-  return { size: BASE, label: `${BASE} MNQ`, reason: 'Pullback válido (50-150pts) — tamaño base', action: 'GO' }
+  if (day === 'Mar') return { size: SE_BASE, label: `${SE_BASE} MNQ`, reason: 'Martes SE — tamaño base siempre', action: 'GO' }
+  // Domingos: escalar por pullback
+  if (pullbackPts >= 100) return { size: SE_DOM_TOP, label: `${SE_DOM_TOP} MNQ`, reason: 'Dom 100-150pts = sweet spot histórico — tamaño premium', action: 'GO TOP' }
+  return { size: SE_DOM_OK, label: `${SE_DOM_OK} MNQ`, reason: 'Dom 50-100pts — pullback válido, tamaño moderado', action: 'GO' }
 }
 
 // ── Helpers de tiempo ─────────────────────────────────────────────────────────
@@ -133,15 +157,17 @@ export default function SizingPage() {
 
   // Sizing color helpers
   const sizeColor = (n: number) =>
-    n === 0  ? 'text-red-400' :
-    n >= BASE * 2 ? 'text-yellow-300' :
-    n >= BASE * 1.5 ? 'text-emerald-300' :
+    n === 0         ? 'text-red-400'     :
+    n >= BK_MAR_TOP ? 'text-yellow-300'  :
+    n >= BK_MAR     ? 'text-emerald-300' :
+    n >= SE_DOM_TOP ? 'text-emerald-300' :
     'text-zinc-200'
 
   const sizeBg = (n: number) =>
-    n === 0   ? 'bg-red-500/10 border-red-500' :
-    n >= BASE * 2 ? 'bg-yellow-400/10 border-yellow-400' :
-    n >= BASE * 1.5 ? 'bg-emerald-500/10 border-emerald-400' :
+    n === 0         ? 'bg-red-500/10    border-red-500'     :
+    n >= BK_MAR_TOP ? 'bg-yellow-400/10 border-yellow-400'  :
+    n >= BK_MAR     ? 'bg-emerald-500/10 border-emerald-400':
+    n >= SE_DOM_TOP ? 'bg-emerald-500/10 border-emerald-400':
     'bg-zinc-800 border-zinc-600'
 
   return (
@@ -261,8 +287,9 @@ export default function SizingPage() {
               pts > 150 ? 'text-red-400' : pts >= 50 ? 'text-emerald-400' : 'text-amber-400'
             }`}>
               {pts > 150 ? '⛔ NO ENTRAR — probabilidad invertida'
-              : pts >= 100 && seDay === 'Dom' ? `✅ ${BASE * 1.5} MNQ — pullback fuerte Dom`
-              : pts >= 50 ? `✅ ${BASE} MNQ — pullback válido`
+              : pts >= 100 && seDay === 'Dom' ? `✅ ${SE_DOM_TOP} MNQ — pullback fuerte Dom`
+              : pts >= 50 && seDay === 'Dom' ? `✅ ${SE_DOM_OK} MNQ — pullback válido Dom`
+              : pts >= 50 ? `✅ ${SE_BASE} MNQ — Martes base`
               : '⏳ Muy pequeño — esperar más retroceso'}
             </p>
             <button onClick={() => setPullback('')} className="text-xs text-zinc-600 hover:text-zinc-400">✕</button>
@@ -288,7 +315,7 @@ export default function SizingPage() {
                     {isCurrent && <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">HOY</span>}
                   </div>
                   <span className={`text-sm font-black ${isMar ? 'text-yellow-300' : pause.length > 0 ? 'text-zinc-300' : 'text-emerald-400'}`}>
-                    {isMar ? `${BASE * 2} MNQ ⭐` : `${BASE} MNQ`}
+                    {isMar ? `${BK_MAR} MNQ ⭐` : `${BK_BASE} MNQ`}
                   </span>
                 </div>
                 {isMar ? (
@@ -311,7 +338,7 @@ export default function SizingPage() {
           })}
         </div>
         <p className="text-xs text-zinc-600 mt-3 border-t border-zinc-800 pt-3">
-          Base = {BASE} MNQ · SL = 50pts · Riesgo = ${BASE * 50 * 2 / 10 * 10} USD por trade
+          Base {BK_BASE} MNQ → riesgo $500 · Mar {BK_MAR} MNQ → $1,000 · Mar top {BK_MAR_TOP} MNQ → $1,500 por trade (SL 50pts)
         </p>
       </div>
 
@@ -385,7 +412,7 @@ export default function SizingPage() {
               }`}>
                 <p className={`text-xs font-black ${isCurrent ? 'text-emerald-400' : isMar ? 'text-yellow-300' : 'text-zinc-400'}`}>{day}</p>
                 <p className={`text-lg font-black mt-1 ${isMar ? 'text-yellow-300' : 'text-zinc-200'}`}>
-                  {isMar ? '20' : BASE}
+                  {isMar ? BK_MAR : BK_BASE}
                 </p>
                 <p className="text-xs text-zinc-600">MNQ</p>
                 {pause.length > 0 && (
