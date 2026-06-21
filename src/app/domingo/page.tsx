@@ -70,10 +70,53 @@ interface SignalLog {
   created_at: string
 }
 
+function PullbackTable({
+  buckets,
+  matched,
+  isDom,
+}: {
+  buckets: ReturnType<typeof calcPullbackDepthBuckets>
+  matched: ReturnType<typeof calcPullbackDepthBuckets>[0] | null
+  isDom: boolean
+}) {
+  return (
+    <div className="space-y-2">
+      {buckets.map(b => {
+        const isActive = matched?.label === b.label
+        return (
+          <div
+            key={b.label}
+            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
+              isActive
+                ? isDom ? 'bg-zinc-700 ring-2 ring-emerald-500' : 'bg-zinc-700 ring-2 ring-blue-500'
+                : ''
+            }`}
+          >
+            <span className="text-xs font-mono text-zinc-400 w-20 shrink-0">{b.label}</span>
+            <div className="flex-1 h-2.5 bg-zinc-800 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full ${b.winRate >= 70 ? 'bg-emerald-500' : b.winRate >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+                style={{ width: `${b.winRate}%` }}
+              />
+            </div>
+            <span className={`text-sm font-black w-10 text-right shrink-0 ${b.winRate >= 70 ? 'text-emerald-400' : b.winRate >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
+              {b.winRate}%
+            </span>
+            <span className={`text-xs w-14 text-right font-mono shrink-0 ${b.avgPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {b.avgPnl >= 0 ? '+' : ''}{b.avgPnl}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function EnVivoPage() {
   const [sessions, setSessions]   = useState<Session[]>([])
   const [loading, setLoading]     = useState(true)
 
+  // ── localStorage: persiste día entre refreshes ───────────────────────────
   const [activeDay, setActiveDayState] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('se_activeDay')
@@ -128,11 +171,19 @@ export default function EnVivoPage() {
   const { h: nyH, m: nyM, totalMin: nyMin, dow: nyDow } = getNYTime(now)
   const seActive = isSEActive(nyMin, nyDow)
 
-  const hourLowDom = calcHourMapByDay(sessions, 'Dom', 'hora_baja')
-  const hourLowMar = calcHourMapByDay(sessions, 'Mar', 'hora_baja')
-  const topLowDom  = [...hourLowDom].sort((a, b) => b.count - a.count).slice(0, 6)
-  const topLowMar  = [...hourLowMar].sort((a, b) => b.count - a.count).slice(0, 6)
+  // Calculos de pullback para Dom y Mar (para pre-sesión)
+  const bucketsDom = calcPullbackDepthBuckets(sessions, 'Dom')
+  const bucketsMar = calcPullbackDepthBuckets(sessions, 'Mar')
 
+  // Stats generales por día (para pre-sesión y day selector)
+  const domSessions = sessions.filter(s => normDay(s.dia) === 'Dom')
+  const marSessions = sessions.filter(s => normDay(s.dia) === 'Mar')
+  const domWins = domSessions.filter(s => (s.cierre ?? 0) >= 0).length
+  const marWins = marSessions.filter(s => (s.cierre ?? 0) >= 0).length
+  const domWR = domSessions.length > 0 ? Math.round(domWins / domSessions.length * 100) : 0
+  const marWR = marSessions.length > 0 ? Math.round(marWins / marSessions.length * 100) : 0
+
+  // ── Pre-sesión ─────────────────────────────────────────────────────────────
   if (!seActive) {
     const minsLeft = minsToNextSEOpen(nyMin, nyDow)
     const dLeft = Math.floor(minsLeft / (60 * 24))
@@ -140,7 +191,7 @@ export default function EnVivoPage() {
     const mLeft = minsLeft % 60
 
     return (
-      <div className="max-w-lg mx-auto space-y-4">
+      <div className="max-w-lg mx-auto space-y-4 pb-8">
         <div className="flex flex-col items-center justify-center min-h-[50vh] gap-6 text-center">
           <p className="text-5xl">⏳</p>
           <div>
@@ -155,52 +206,57 @@ export default function EnVivoPage() {
           </div>
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-          <p className="text-xs font-semibold text-zinc-400 mb-3">📋 Ventanas de low · Domingos</p>
-          <div className="flex gap-2 flex-wrap">
-            {topLowDom.map((h, i) => (
-              <div key={h.hour} className={`rounded-xl px-3 py-2 text-center min-w-[52px] border ${
-                i < 3
-                  ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-400'
-                  : 'bg-zinc-800 border-zinc-700 text-zinc-500'
-              }`}>
-                <p className="text-xs font-mono font-bold">{h.hour}</p>
-                <p className="text-xs opacity-70 mt-0.5">{h.pct}%</p>
-              </div>
-            ))}
+        {/* Stats resumen */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+            <p className="text-xs text-zinc-500 mb-1">🌟 Domingos</p>
+            <p className="text-3xl font-black text-emerald-400">{domWR}%</p>
+            <p className="text-xs text-zinc-600">{domSessions.length} sesiones</p>
           </div>
-          <p className="text-xs text-zinc-600 mt-3">⏰ Vigila el pullback en las horas destacadas</p>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+            <p className="text-xs text-zinc-500 mb-1">📈 Martes</p>
+            <p className="text-3xl font-black text-blue-400">{marWR}%</p>
+            <p className="text-xs text-zinc-600">{marSessions.length} sesiones</p>
+          </div>
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-          <p className="text-xs font-semibold text-zinc-400 mb-3">📋 Ventanas de low · Martes</p>
-          <div className="flex gap-2 flex-wrap">
-            {topLowMar.map((h, i) => (
-              <div key={h.hour} className={`rounded-xl px-3 py-2 text-center min-w-[52px] border ${
-                i < 3
-                  ? 'bg-blue-500/15 border-blue-500/50 text-blue-400'
-                  : 'bg-zinc-800 border-zinc-700 text-zinc-500'
-              }`}>
-                <p className="text-xs font-mono font-bold">{h.hour}</p>
-                <p className="text-xs opacity-70 mt-0.5">{h.pct}%</p>
-              </div>
-            ))}
+        {/* Referencia pullback Domingo */}
+        {bucketsDom.length > 0 && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+            <p className="text-xs font-semibold text-zinc-400 mb-3">
+              📋 Pullback → Probabilidad · Domingos
+            </p>
+            <PullbackTable buckets={bucketsDom} matched={null} isDom={true} />
+            <p className="text-xs text-zinc-600 mt-3">⚠️ &gt;150 pts — probabilidad se invierte</p>
           </div>
-        </div>
+        )}
+
+        {/* Referencia pullback Martes */}
+        {bucketsMar.length > 0 && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+            <p className="text-xs font-semibold text-zinc-400 mb-3">
+              📋 Pullback → Probabilidad · Martes
+            </p>
+            <PullbackTable buckets={bucketsMar} matched={null} isDom={false} />
+          </div>
+        )}
       </div>
     )
   }
 
+  // ── Sesión activa ─────────────────────────────────────────────────────────
   const daySessions = sessions.filter(s => normDay(s.dia) === activeDay)
   const buckets     = calcPullbackDepthBuckets(sessions, activeDay)
   const hourLow     = calcHourMapByDay(sessions, activeDay, 'hora_baja')
   const monthly     = calcMonthlyByDay(sessions, activeDay)
 
+  // Horas ordenadas con datos (si las hay)
   const allHoursWithData = [...hourLow].sort(
     (a, b) => HOUR_ORDER.indexOf(a.hour) - HOUR_ORDER.indexOf(b.hour)
   )
   const topLowHours = [...hourLow].sort((a, b) => b.count - a.count).slice(0, 3)
   const hotLowSet   = new Set(topLowHours.map(h => h.hour))
+  const hasHourData = allHoursWithData.length > 0
 
   const hourNow    = toHourLabel(now.getHours())
   const inWindow   = hotLowSet.has(hourNow)
@@ -214,11 +270,13 @@ export default function EnVivoPage() {
         .sort((a, b) => a.idx - b.idx)[0] ?? topLowHours[0]
     : null
 
+  // Pullback → bucket
   const pts     = parseFloat(pullback)
   const matched = isNaN(pts) ? null : buckets.find(b =>
     pts >= b.minPts && (b.maxPts === null || pts < b.maxPts)
   ) ?? null
 
+  // Mes histórico
   const sameMonthNum  = String(now.getMonth() + 1).padStart(2, '0')
   const thisMonthKey  = `${now.getFullYear()}-${sameMonthNum}`
   const historicMonth = monthly.filter(m => m.month.endsWith(`-${sameMonthNum}`) && m.month !== thisMonthKey)
@@ -226,6 +284,7 @@ export default function EnVivoPage() {
     ? Math.round(historicMonth.reduce((a, m) => a + m.avgPnl, 0) / historicMonth.length)
     : null
 
+  // Stats generales
   const wins    = daySessions.filter(s => (s.cierre ?? 0) >= 0).length
   const winRate = daySessions.length > 0 ? Math.round(wins / daySessions.length * 100) : 0
   const avgPts  = daySessions.length > 0
@@ -236,6 +295,7 @@ export default function EnVivoPage() {
   const timeStr = `${String(nyH).padStart(2,'0')}:${String(nyM).padStart(2,'0')} NY`
   const dateStr = now.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })
 
+  // Señal pullback
   const pullbackSignal = matched
     ? matched.winRate >= 70 ? (inWindow ? 'GO' : 'GO_OOW')
     : matched.winRate >= 50 ? 'CAUTION'
@@ -285,29 +345,52 @@ export default function EnVivoPage() {
         })}
       </div>
 
-      {/* SEMÁFORO PRINCIPAL — Hora */}
+      {/* SEMÁFORO PRINCIPAL — Pullback (señal real de SE) */}
       <div className={`rounded-2xl border-2 p-6 ${
-        inWindow
-          ? 'bg-emerald-500/10 border-emerald-500'
-          : 'bg-zinc-900 border-zinc-700'
+        !matched                     ? 'bg-zinc-900 border-zinc-700'
+        : pullbackSignal === 'GO'    ? 'bg-emerald-500/10 border-emerald-500'
+        : pullbackSignal === 'GO_OOW'? 'bg-emerald-500/10 border-amber-400'
+        : pullbackSignal === 'CAUTION'? 'bg-amber-500/10 border-amber-500'
+        :                              'bg-red-500/10 border-red-500'
       }`}>
-        <p className={`text-3xl font-black ${inWindow ? 'text-emerald-400' : 'text-zinc-400'}`}>
-          {inWindow ? '🟢  HORA ACTIVA' : '🔴  ESPERAR'}
+        <p className={`text-3xl font-black ${
+          !matched                      ? 'text-zinc-500'
+          : pullbackSignal === 'GO' || pullbackSignal === 'GO_OOW' ? 'text-emerald-400'
+          : pullbackSignal === 'CAUTION' ? 'text-amber-400'
+          : 'text-red-400'
+        }`}>
+          {!matched            ? '⏳  INTRODUCE PULLBACK'
+          : pullbackSignal === 'GO'      ? '🟢  GO'
+          : pullbackSignal === 'GO_OOW'  ? '🟢  GO  ⚠️'
+          : pullbackSignal === 'CAUTION' ? '🟡  ESPERA'
+          :                                '🔴  NO ENTRES'}
         </p>
         <p className="text-sm text-zinc-400 mt-2">
-          {inWindow
-            ? `${hourNow} → low aquí el ${hourLowNow?.pct ?? '—'}% de ${isDom ? 'domingos' : 'martes'} — monitorea el pullback`
-            : nextWindow
-              ? `No es hora típica de low — próxima ventana: ${nextWindow.hour} (${nextWindow.pct}%)`
-              : 'Hora poco frecuente para el low de sesión'
+          {!matched
+            ? 'Introduce el pullback desde el open para calcular tu señal'
+            : pullbackSignal === 'GO'
+            ? 'Pullback fuerte + hora activa — setup óptimo, entra'
+            : pullbackSignal === 'GO_OOW'
+            ? 'Pullback favorable pero fuera de ventana histórica — ok, sin agregar'
+            : pullbackSignal === 'CAUTION'
+            ? 'Condiciones mixtas — espera mejor setup o reduce tamaño'
+            : 'Probabilidad histórica en tu contra — salta este trade'
           }
         </p>
 
-        {inWindow && (
-          <div className="mt-4 flex gap-4 border-t border-emerald-500/20 pt-4">
+        {matched && (
+          <div className="mt-4 flex gap-4 border-t border-zinc-700 pt-4">
             <div>
-              <p className="text-xs text-zinc-500">Freq. low</p>
-              <p className="text-2xl font-black text-emerald-400">{hourLowNow?.pct ?? '—'}%</p>
+              <p className="text-xs text-zinc-500">WR pullback</p>
+              <p className={`text-2xl font-black ${matched.winRate >= 70 ? 'text-emerald-400' : matched.winRate >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
+                {matched.winRate}%
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-zinc-500">Avg pts</p>
+              <p className={`text-2xl font-black ${matched.avgPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {matched.avgPnl >= 0 ? '+' : ''}{matched.avgPnl}
+              </p>
             </div>
             <div>
               <p className="text-xs text-zinc-500">WR {activeDay}</p>
@@ -323,50 +406,6 @@ export default function EnVivoPage() {
             )}
           </div>
         )}
-
-        {!inWindow && (
-          <div className="mt-4 border-t border-zinc-700 pt-4">
-            <p className="text-xs text-zinc-500">
-              {nextWindow
-                ? `Próxima ventana: ${nextWindow.hour} · ${nextWindow.pct}% de sesiones hacen low aquí`
-                : 'No hay ventana clara adelante — espera el movimiento'
-              }
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Grid de horas */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-        <p className="text-xs font-semibold text-zinc-400 mb-3">
-          Ventanas de low · {isDom ? 'Domingos' : 'Martes'} — top 3 destacadas
-        </p>
-        <div className="flex gap-2 flex-wrap">
-          {allHoursWithData.map(h => {
-            const isTop     = hotLowSet.has(h.hour)
-            const isCurrent = h.hour === hourNow
-            return (
-              <div
-                key={h.hour}
-                className={`rounded-xl px-3 py-2.5 text-center min-w-[52px] border-2 transition-all ${
-                  isCurrent
-                    ? isTop
-                      ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 scale-110'
-                      : 'bg-zinc-700 border-zinc-500 text-zinc-300 scale-110'
-                    : isTop
-                    ? isDom
-                      ? 'bg-emerald-500/8 border-emerald-500/30 text-emerald-400'
-                      : 'bg-blue-500/8 border-blue-500/30 text-blue-400'
-                    : 'bg-zinc-800 border-zinc-700 text-zinc-500'
-                }`}
-              >
-                <p className="text-xs font-mono font-bold">{h.hour}</p>
-                <p className="text-xs mt-0.5">{h.pct}%</p>
-                <p className="text-xs opacity-50">{h.count}t</p>
-              </div>
-            )
-          })}
-        </div>
       </div>
 
       {/* Input pullback */}
@@ -399,49 +438,45 @@ export default function EnVivoPage() {
         )}
       </div>
 
-      {/* Señal pullback */}
-      {matched && (
-        <div className={`rounded-2xl border-2 p-6 text-center ${
-          pullbackSignal === 'GO'      ? 'bg-emerald-500/10 border-emerald-500' :
-          pullbackSignal === 'GO_OOW'  ? 'bg-emerald-500/10 border-amber-400'  :
-          pullbackSignal === 'CAUTION' ? 'bg-amber-500/10   border-amber-500'  :
-                                         'bg-red-500/10     border-red-500'
-        }`}>
-          <p className={`text-4xl font-black ${
-            pullbackSignal === 'GO' || pullbackSignal === 'GO_OOW' ? 'text-emerald-400' :
-            pullbackSignal === 'CAUTION' ? 'text-amber-400' : 'text-red-400'
-          }`}>
-            {pullbackSignal === 'GO'      ? '🟢  GO'
-           : pullbackSignal === 'GO_OOW'  ? '🟢  GO  ⚠️'
-           : pullbackSignal === 'CAUTION' ? '🟡  ESPERA'
-           :                                '🔴  NO ENTRES'}
+      {/* Grid de horas — solo si hay datos */}
+      {hasHourData && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+          <p className="text-xs font-semibold text-zinc-400 mb-3">
+            Ventanas de low · {isDom ? 'Domingos' : 'Martes'} — top 3 destacadas
           </p>
-          <p className="text-sm text-zinc-400 mt-3">
-            {pullbackSignal === 'GO'
-              ? 'Pullback fuerte + hora activa — setup óptimo, entra'
-              : pullbackSignal === 'GO_OOW'
-              ? 'Pullback favorable pero fuera de ventana — ok, sin agregar'
-              : pullbackSignal === 'CAUTION'
-              ? 'Condiciones mixtas — espera mejor setup o reduce tamaño'
-              : 'Probabilidad histórica en tu contra — salta este trade'
+          <div className="flex gap-2 flex-wrap">
+            {allHoursWithData.map(h => {
+              const isTop     = hotLowSet.has(h.hour)
+              const isCurrent = h.hour === hourNow
+              return (
+                <div
+                  key={h.hour}
+                  className={`rounded-xl px-3 py-2.5 text-center min-w-[52px] border-2 transition-all ${
+                    isCurrent
+                      ? isTop
+                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 scale-110'
+                        : 'bg-zinc-700 border-zinc-500 text-zinc-300 scale-110'
+                      : isTop
+                      ? isDom
+                        ? 'bg-emerald-500/8 border-emerald-500/30 text-emerald-400'
+                        : 'bg-blue-500/8 border-blue-500/30 text-blue-400'
+                      : 'bg-zinc-800 border-zinc-700 text-zinc-500'
+                  }`}
+                >
+                  <p className="text-xs font-mono font-bold">{h.hour}</p>
+                  <p className="text-xs mt-0.5">{h.pct}%</p>
+                </div>
+              )
+            })}
+          </div>
+          <p className="text-xs text-zinc-600 mt-2">
+            {inWindow
+              ? `✓ ${hourNow} es hora activa — ${hourLowNow?.pct ?? '—'}% de sesiones hacen low aquí`
+              : nextWindow
+                ? `Próxima ventana: ${nextWindow.hour} (${nextWindow.pct}%)`
+                : ''
             }
           </p>
-          <div className="flex justify-center gap-5 mt-5 text-xs text-zinc-500">
-            <span className="flex flex-col items-center gap-1">
-              <span className="text-base font-black text-zinc-200">{matched.winRate}%</span>
-              <span>pullback WR</span>
-            </span>
-            <span className="text-zinc-700">|</span>
-            <span className="flex flex-col items-center gap-1">
-              <span className="text-base font-black text-zinc-200">{matched.avgPnl >= 0 ? '+' : ''}{matched.avgPnl}</span>
-              <span>avg pts</span>
-            </span>
-            <span className="text-zinc-700">|</span>
-            <span className="flex flex-col items-center gap-1">
-              <span className="text-base font-black text-zinc-200">{inWindow ? '✓' : '✗'}</span>
-              <span>hora ventana</span>
-            </span>
-          </div>
         </div>
       )}
 
@@ -477,35 +512,7 @@ export default function EnVivoPage() {
         <p className="text-xs font-semibold text-zinc-400 mb-3">
           Pullback → Probabilidad · {isDom ? 'Domingos' : 'Martes'}
         </p>
-        <div className="space-y-2.5">
-          {buckets.map(b => {
-            const isActive = matched?.label === b.label
-            return (
-              <div
-                key={b.label}
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
-                  isActive
-                    ? isDom ? 'bg-zinc-700 ring-2 ring-emerald-500' : 'bg-zinc-700 ring-2 ring-blue-500'
-                    : ''
-                }`}
-              >
-                <span className="text-xs font-mono text-zinc-400 w-20 shrink-0">{b.label}</span>
-                <div className="flex-1 h-2.5 bg-zinc-800 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${b.winRate >= 70 ? 'bg-emerald-500' : b.winRate >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
-                    style={{ width: `${b.winRate}%` }}
-                  />
-                </div>
-                <span className={`text-sm font-black w-10 text-right shrink-0 ${b.winRate >= 70 ? 'text-emerald-400' : b.winRate >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
-                  {b.winRate}%
-                </span>
-                <span className={`text-xs w-14 text-right font-mono shrink-0 ${b.avgPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {b.avgPnl >= 0 ? '+' : ''}{b.avgPnl}
-                </span>
-              </div>
-            )
-          })}
-        </div>
+        <PullbackTable buckets={buckets} matched={matched} isDom={isDom} />
         <p className="text-xs text-zinc-600 mt-3">⚠️ &gt;150 pts — probabilidad se invierte</p>
       </div>
 
@@ -572,7 +579,7 @@ export default function EnVivoPage() {
 
         {pendingLogId && !logSaved && (
           <>
-            <p className="text-xs text-zinc-500">¿Cuántos puntos resultó? (llena después del trade)</p>
+            <p className="text-xs text-zinc-500">¿Cuántos puntos resultó?</p>
             <div className="flex gap-3">
               <input
                 type="number"
