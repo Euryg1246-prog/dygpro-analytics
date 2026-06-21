@@ -27,26 +27,22 @@ function getNYTime(now: Date) {
   return { h, m, totalMin: h * 60 + m, dow }
 }
 
-// SE activa: Dom>=18h, Lun<16:15 o >=18h, Mar<16:15 o >=18h, Mié<16:15
-const SE_OPEN_MIN  = 18 * 60        // 1080
-const SE_CLOSE_MIN = 16 * 60 + 15  // 975
+const SE_OPEN_MIN  = 18 * 60
+const SE_CLOSE_MIN = 16 * 60 + 15
 
 function isSEActive(totalMin: number, dow: number): boolean {
-  const afterOpen  = totalMin >= SE_OPEN_MIN
+  const afterOpen   = totalMin >= SE_OPEN_MIN
   const beforeClose = totalMin < SE_CLOSE_MIN
-  if (dow === 0) return afterOpen          // Dom → solo desde 18h
-  if (dow === 1 || dow === 2) return afterOpen || beforeClose // Lun/Mar
-  if (dow === 3) return beforeClose        // Mié → solo hasta 16:15
-  return false                             // Jue/Vie/Sáb → nunca
+  if (dow === 0) return afterOpen
+  if (dow === 1 || dow === 2) return afterOpen || beforeClose
+  if (dow === 3) return beforeClose
+  return false
 }
 
-// Minutos hasta el próximo open (Dom 18:00 o mismo día si ya pasó el close)
 function minsToNextSEOpen(totalMin: number, dow: number): number {
-  // Si hoy es un día de apertura (Dom/Lun/Mar) y aún no son las 18h
   if ((dow === 0 || dow === 1 || dow === 2) && totalMin < SE_OPEN_MIN) {
     return SE_OPEN_MIN - totalMin
   }
-  // Calcular días hasta el próximo Domingo
   const daysUntilSun = (7 - dow) % 7 || 7
   return daysUntilSun * 24 * 60 - totalMin + SE_OPEN_MIN
 }
@@ -56,30 +52,9 @@ const HOUR_ORDER = [
   '12PM','1PM','2PM','3PM','4PM','5PM','6PM','7PM','8PM','9PM','10PM','11PM',
 ]
 
-type Signal = 'GO' | 'GO_OOW' | 'CAUTION' | 'NO'
-
-function getSignal(winRate: number | null, inWindow: boolean, monthAvg: number | null): Signal {
-  if (winRate === null) return 'CAUTION'
-  if (winRate < 35) return 'NO'
-  // Pullback fuerte → GO siempre (la probabilidad sola justifica entrar)
-  if (winRate >= 80) return (monthAvg === null || monthAvg >= 0) ? 'GO' : 'GO_OOW'
-  // Pullback bueno + en ventana → GO limpio
-  if (winRate >= 60 && inWindow) return 'GO'
-  // Pullback bueno pero fuera de ventana → GO con advertencia de hora
-  if (winRate >= 60) return 'GO_OOW'
-  return 'CAUTION'
-}
-
-const SIG: Record<Signal, { bg: string; border: string; text: string; label: string; sub: string }> = {
-  GO:      { bg: 'bg-emerald-500/10', border: 'border-emerald-500',      text: 'text-emerald-400', label: '🟢  GO',               sub: 'Pullback favorable + en ventana de hora — entra' },
-  GO_OOW:  { bg: 'bg-emerald-500/10', border: 'border-amber-400',        text: 'text-emerald-400', label: '🟢  GO  ⚠️',           sub: 'Pullback favorable pero fuera de ventana de hora — tamaño normal, sin agregar' },
-  CAUTION: { bg: 'bg-amber-500/10',   border: 'border-amber-500',        text: 'text-amber-400',   label: '🟡  ESPERA',           sub: 'Condiciones mixtas — espera mejor setup o reduce tamaño' },
-  NO:      { bg: 'bg-red-500/10',     border: 'border-red-500',          text: 'text-red-400',     label: '🔴  NO ENTRES',        sub: 'Probabilidad histórica en tu contra — salta este trade' },
-}
-
-const DAYS = [
-  { key: 'Dom', label: '🌟 Domingo' },
-  { key: 'Mar', label: '📈 Martes'  },
+const DAYS_LIST = [
+  { key: 'Dom', label: 'Domingo' },
+  { key: 'Mar', label: 'Martes'  },
 ]
 
 interface SignalLog {
@@ -92,27 +67,37 @@ interface SignalLog {
   en_ventana: boolean
   entro: boolean | null
   outcome_pts: number | null
-  notas: string | null
   created_at: string
 }
 
 export default function EnVivoPage() {
   const [sessions, setSessions]   = useState<Session[]>([])
   const [loading, setLoading]     = useState(true)
-  const [activeDay, setActiveDay] = useState<string>('Dom')
-  const [pullback, setPullback]   = useState<string>('')
-  const [now, setNow]             = useState(new Date())
 
-  // Log de señales
+  const [activeDay, setActiveDayState] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('se_activeDay')
+      if (saved && ['Dom', 'Mar'].includes(saved)) return saved
+    }
+    const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+    const d = days[new Date().getDay()]
+    return d === 'Mar' ? 'Mar' : 'Dom'
+  })
+  const setActiveDay = (d: string) => {
+    localStorage.setItem('se_activeDay', d)
+    setActiveDayState(d)
+  }
+
+  const [pullback, setPullback]         = useState('')
+  const [now, setNow]                   = useState(new Date())
   const [signalLogs, setSignalLogs]     = useState<SignalLog[]>([])
   const [logSaved, setLogSaved]         = useState(false)
-  const [logEntro, setLogEntro]         = useState<boolean | null>(null)
-  const [logOutcome, setLogOutcome]     = useState<string>('')
+  const [logOutcome, setLogOutcome]     = useState('')
   const [savingLog, setSavingLog]       = useState(false)
   const [pendingLogId, setPendingLogId] = useState<string | null>(null)
 
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 10_000)
+    const t = setInterval(() => setNow(new Date()), 15_000)
     return () => clearInterval(t)
   }, [])
 
@@ -140,56 +125,87 @@ export default function EnVivoPage() {
     </div>
   )
 
-  // ── Detección de sesión SE (hora NY) ──
   const { h: nyH, m: nyM, totalMin: nyMin, dow: nyDow } = getNYTime(now)
   const seActive = isSEActive(nyMin, nyDow)
+
+  const hourLowDom = calcHourMapByDay(sessions, 'Dom', 'hora_baja')
+  const hourLowMar = calcHourMapByDay(sessions, 'Mar', 'hora_baja')
+  const topLowDom  = [...hourLowDom].sort((a, b) => b.count - a.count).slice(0, 6)
+  const topLowMar  = [...hourLowMar].sort((a, b) => b.count - a.count).slice(0, 6)
 
   if (!seActive) {
     const minsLeft = minsToNextSEOpen(nyMin, nyDow)
     const dLeft = Math.floor(minsLeft / (60 * 24))
     const hLeft = Math.floor((minsLeft % (60 * 24)) / 60)
     const mLeft = minsLeft % 60
+
     return (
-      <div className="max-w-lg mx-auto flex flex-col items-center justify-center min-h-[70vh] gap-6 text-center">
-        <p className="text-6xl">⏳</p>
-        <div>
-          <p className="text-2xl font-black text-zinc-200">No hay sesión</p>
-          <p className="text-zinc-500 mt-1">Session Edge · Dom/Lun/Mar 6:00 PM – 4:15 PM NY</p>
+      <div className="max-w-lg mx-auto space-y-4">
+        <div className="flex flex-col items-center justify-center min-h-[50vh] gap-6 text-center">
+          <p className="text-5xl">⏳</p>
+          <div>
+            <p className="text-2xl font-black text-zinc-200">Sin sesión activa</p>
+            <p className="text-zinc-500 mt-1 text-sm">Session Edge · Dom/Lun/Mar 6:00 PM – 4:15 PM NY</p>
+          </div>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-10 py-6">
+            <p className="text-5xl font-mono font-black text-emerald-400">
+              {dLeft > 0 ? `${dLeft}d ` : ''}{hLeft}h {String(mLeft).padStart(2, '0')}m
+            </p>
+            <p className="text-xs text-zinc-500 mt-2">para el próximo open</p>
+          </div>
         </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-10 py-6">
-          <p className="text-5xl font-mono font-black text-emerald-400">
-            {dLeft > 0 ? `${dLeft}d ` : ''}{hLeft}h {String(mLeft).padStart(2, '0')}m
-          </p>
-          <p className="text-xs text-zinc-500 mt-2">para el próximo open</p>
+
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+          <p className="text-xs font-semibold text-zinc-400 mb-3">📋 Ventanas de low · Domingos</p>
+          <div className="flex gap-2 flex-wrap">
+            {topLowDom.map((h, i) => (
+              <div key={h.hour} className={`rounded-xl px-3 py-2 text-center min-w-[52px] border ${
+                i < 3
+                  ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-400'
+                  : 'bg-zinc-800 border-zinc-700 text-zinc-500'
+              }`}>
+                <p className="text-xs font-mono font-bold">{h.hour}</p>
+                <p className="text-xs opacity-70 mt-0.5">{h.pct}%</p>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-zinc-600 mt-3">⏰ Vigila el pullback en las horas destacadas</p>
         </div>
-        <p className="text-xs text-zinc-600 max-w-xs">
-          Ten listo el nivel del open de NQ cuando abra el mercado.
-        </p>
+
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+          <p className="text-xs font-semibold text-zinc-400 mb-3">📋 Ventanas de low · Martes</p>
+          <div className="flex gap-2 flex-wrap">
+            {topLowMar.map((h, i) => (
+              <div key={h.hour} className={`rounded-xl px-3 py-2 text-center min-w-[52px] border ${
+                i < 3
+                  ? 'bg-blue-500/15 border-blue-500/50 text-blue-400'
+                  : 'bg-zinc-800 border-zinc-700 text-zinc-500'
+              }`}>
+                <p className="text-xs font-mono font-bold">{h.hour}</p>
+                <p className="text-xs opacity-70 mt-0.5">{h.pct}%</p>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     )
   }
 
-  // Variables legacy que usaba el código original
-  const hour    = nyH
-  const minutes = nyM
-
-  // ── Cálculos ──
   const daySessions = sessions.filter(s => normDay(s.dia) === activeDay)
   const buckets     = calcPullbackDepthBuckets(sessions, activeDay)
   const hourLow     = calcHourMapByDay(sessions, activeDay, 'hora_baja')
-  const hourHigh    = calcHourMapByDay(sessions, activeDay, 'hora_pico')
   const monthly     = calcMonthlyByDay(sessions, activeDay)
 
-  const topLowHours  = [...hourLow].sort((a, b) => b.count - a.count).slice(0, 3)
-  const topHighHours = [...hourHigh].sort((a, b) => b.count - a.count).slice(0, 3)
-  const hotLowSet    = new Set(topLowHours.map(h => h.hour))
+  const allHoursWithData = [...hourLow].sort(
+    (a, b) => HOUR_ORDER.indexOf(a.hour) - HOUR_ORDER.indexOf(b.hour)
+  )
+  const topLowHours = [...hourLow].sort((a, b) => b.count - a.count).slice(0, 3)
+  const hotLowSet   = new Set(topLowHours.map(h => h.hour))
 
-  const hourNow     = toHourLabel(now.getHours())
-  const inWindow    = hotLowSet.has(hourNow)
-  const hourLowNow  = hourLow.find(h => h.hour === hourNow)
-  const hourHighNow = hourHigh.find(h => h.hour === hourNow)
+  const hourNow    = toHourLabel(now.getHours())
+  const inWindow   = hotLowSet.has(hourNow)
+  const hourLowNow = hourLow.find(h => h.hour === hourNow)
 
-  // Próxima ventana
   const nowIdx = HOUR_ORDER.indexOf(hourNow)
   const nextWindow = !inWindow
     ? topLowHours
@@ -198,62 +214,61 @@ export default function EnVivoPage() {
         .sort((a, b) => a.idx - b.idx)[0] ?? topLowHours[0]
     : null
 
-  // Pullback → bucket
   const pts     = parseFloat(pullback)
   const matched = isNaN(pts) ? null : buckets.find(b =>
     pts >= b.minPts && (b.maxPts === null || pts < b.maxPts)
   ) ?? null
 
-  // Mes
   const sameMonthNum  = String(now.getMonth() + 1).padStart(2, '0')
   const thisMonthKey  = `${now.getFullYear()}-${sameMonthNum}`
   const historicMonth = monthly.filter(m => m.month.endsWith(`-${sameMonthNum}`) && m.month !== thisMonthKey)
   const historicAvg   = historicMonth.length > 0
     ? Math.round(historicMonth.reduce((a, m) => a + m.avgPnl, 0) / historicMonth.length)
     : null
-  const thisMonthStat = monthly.find(m => m.month === thisMonthKey) ?? null
 
-  // Stats generales
   const wins    = daySessions.filter(s => (s.cierre ?? 0) >= 0).length
-  const winRate = daySessions.length > 0 ? Math.round((wins / daySessions.length) * 100) : 0
+  const winRate = daySessions.length > 0 ? Math.round(wins / daySessions.length * 100) : 0
   const avgPts  = daySessions.length > 0
     ? Math.round(daySessions.reduce((a, s) => a + (s.cierre ?? 0), 0) / daySessions.length)
     : 0
 
-  // Señal
-  const signal = getSignal(matched?.winRate ?? null, inWindow, historicAvg)
-  const ss = SIG[signal]
-
-  const timeStr = now.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
-  const dateStr = now.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })
   const isDom   = activeDay === 'Dom'
+  const timeStr = `${String(nyH).padStart(2,'0')}:${String(nyM).padStart(2,'0')} NY`
+  const dateStr = now.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })
+
+  const pullbackSignal = matched
+    ? matched.winRate >= 70 ? (inWindow ? 'GO' : 'GO_OOW')
+    : matched.winRate >= 50 ? 'CAUTION'
+    : 'NO'
+    : null
 
   return (
     <div className="max-w-lg mx-auto space-y-4 pb-8">
 
-      {/* Header compacto */}
+      {/* Header */}
       <div className="flex items-center justify-between pt-1">
         <div>
-          <h1 className="text-xl font-bold leading-tight">⚡ En Vivo</h1>
-          <p className="text-xs text-zinc-500 capitalize">{dateStr}</p>
+          <h1 className="text-xl font-bold leading-tight">⚡ Session Edge · Vivo</h1>
+          <p className="text-xs text-zinc-500 capitalize">{dateStr} · Manual</p>
         </div>
         <div className="text-right">
-          <p className="text-2xl font-mono font-black text-zinc-100">{timeStr}</p>
+          <p className="text-xl font-mono font-black text-emerald-400">{timeStr}</p>
+          <p className="text-xs text-zinc-500">sesión activa</p>
         </div>
       </div>
 
-      {/* Selector de día — botones grandes táctiles */}
-      <div className="grid grid-cols-2 gap-3">
-        {DAYS.map(d => {
-          const s = sessions.filter(x => normDay(x.dia) === d.key)
-          const w = s.filter(x => (x.cierre ?? 0) >= 0).length
+      {/* Selector de día */}
+      <div className="flex gap-3">
+        {DAYS_LIST.map(d => {
+          const s  = sessions.filter(x => normDay(x.dia) === d.key)
+          const w  = s.filter(x => (x.cierre ?? 0) >= 0).length
           const wr = s.length > 0 ? Math.round(w / s.length * 100) : 0
           const active = activeDay === d.key
           return (
             <button
               key={d.key}
               onClick={() => { setActiveDay(d.key); setPullback('') }}
-              className={`py-4 rounded-2xl font-bold text-base transition-all border-2 ${
+              className={`flex-1 py-3 rounded-2xl font-bold text-sm transition-all border-2 ${
                 active
                   ? d.key === 'Dom'
                     ? 'bg-emerald-500/15 border-emerald-500 text-emerald-400'
@@ -261,91 +276,116 @@ export default function EnVivoPage() {
                   : 'bg-zinc-900 border-zinc-800 text-zinc-500 active:bg-zinc-800'
               }`}
             >
-              {d.label}
+              {d.label.slice(0, 3)}
               <span className={`block text-xs font-normal mt-0.5 ${active ? 'opacity-80' : 'opacity-50'}`}>
-                {wr}% win · {s.length} sesiones
+                {wr}% · {s.length}t
               </span>
             </button>
           )
         })}
       </div>
 
-      {/* Ventana de tiempo */}
-      <div className={`rounded-2xl border p-4 ${
-        inWindow ? 'bg-emerald-500/8 border-emerald-500/60' : 'bg-zinc-900 border-zinc-800'
+      {/* SEMÁFORO PRINCIPAL — Hora */}
+      <div className={`rounded-2xl border-2 p-6 ${
+        inWindow
+          ? 'bg-emerald-500/10 border-emerald-500'
+          : 'bg-zinc-900 border-zinc-700'
       }`}>
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className={`text-base font-bold leading-snug ${inWindow ? 'text-emerald-400' : 'text-zinc-300'}`}>
-              {inWindow
-                ? '🎯 ESTÁS EN VENTANA'
-                : `⏳ Fuera de ventana${nextWindow ? ` · próxima: ${nextWindow.hour}` : ''}`
+        <p className={`text-3xl font-black ${inWindow ? 'text-emerald-400' : 'text-zinc-400'}`}>
+          {inWindow ? '🟢  HORA ACTIVA' : '🔴  ESPERAR'}
+        </p>
+        <p className="text-sm text-zinc-400 mt-2">
+          {inWindow
+            ? `${hourNow} → low aquí el ${hourLowNow?.pct ?? '—'}% de ${isDom ? 'domingos' : 'martes'} — monitorea el pullback`
+            : nextWindow
+              ? `No es hora típica de low — próxima ventana: ${nextWindow.hour} (${nextWindow.pct}%)`
+              : 'Hora poco frecuente para el low de sesión'
+          }
+        </p>
+
+        {inWindow && (
+          <div className="mt-4 flex gap-4 border-t border-emerald-500/20 pt-4">
+            <div>
+              <p className="text-xs text-zinc-500">Freq. low</p>
+              <p className="text-2xl font-black text-emerald-400">{hourLowNow?.pct ?? '—'}%</p>
+            </div>
+            <div>
+              <p className="text-xs text-zinc-500">WR {activeDay}</p>
+              <p className="text-2xl font-black text-zinc-300">{winRate}%</p>
+            </div>
+            {historicAvg !== null && (
+              <div>
+                <p className="text-xs text-zinc-500">Mes hist.</p>
+                <p className={`text-2xl font-black ${historicAvg >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {historicAvg >= 0 ? '+' : ''}{historicAvg}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {!inWindow && (
+          <div className="mt-4 border-t border-zinc-700 pt-4">
+            <p className="text-xs text-zinc-500">
+              {nextWindow
+                ? `Próxima ventana: ${nextWindow.hour} · ${nextWindow.pct}% de sesiones hacen low aquí`
+                : 'No hay ventana clara adelante — espera el movimiento'
               }
             </p>
-            {hourLowNow
-              ? <p className="text-xs text-zinc-500 mt-1">
-                  Low aquí el <span className="font-semibold text-zinc-300">{hourLowNow.pct}%</span> de las veces
-                  {hourHighNow ? ` · high el ${hourHighNow.pct}%` : ''}
-                </p>
-              : <p className="text-xs text-zinc-600 mt-1">
-                  Esta hora no es frecuente para el low
-                  {nextWindow ? ` · espera hasta ${nextWindow.hour}` : ''}
-                </p>
-            }
           </div>
-          <span className="text-xs font-mono bg-zinc-800 px-2 py-1 rounded-lg text-zinc-400 shrink-0">{hourNow}</span>
-        </div>
+        )}
+      </div>
 
-        {/* Top horas en píldoras */}
-        <div className="mt-3 space-y-2">
-          {topLowHours.length > 0 && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-zinc-600 w-16 shrink-0">📉 Low:</span>
-              {topLowHours.map(h => (
-                <span key={h.hour} className={`px-2.5 py-1 rounded-lg text-xs font-mono font-semibold ${
-                  h.hour === hourNow
-                    ? isDom ? 'bg-emerald-500 text-white' : 'bg-blue-500 text-white'
-                    : 'bg-zinc-800 text-zinc-300'
-                }`}>
-                  {h.hour} <span className="opacity-60">({h.pct}%)</span>
-                </span>
-              ))}
-            </div>
-          )}
-          {topHighHours.length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-zinc-600 w-16 shrink-0">📈 High:</span>
-            {topHighHours.map(h => (
-              <span key={h.hour} className={`px-2.5 py-1 rounded-lg text-xs font-mono ${
-                h.hour === hourNow ? 'bg-zinc-600 text-white' : 'bg-zinc-800/60 text-zinc-400'
-              }`}>
-                {h.hour} <span className="opacity-60">({h.pct}%)</span>
-              </span>
-            ))}
-          </div>
-          )}
+      {/* Grid de horas */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+        <p className="text-xs font-semibold text-zinc-400 mb-3">
+          Ventanas de low · {isDom ? 'Domingos' : 'Martes'} — top 3 destacadas
+        </p>
+        <div className="flex gap-2 flex-wrap">
+          {allHoursWithData.map(h => {
+            const isTop     = hotLowSet.has(h.hour)
+            const isCurrent = h.hour === hourNow
+            return (
+              <div
+                key={h.hour}
+                className={`rounded-xl px-3 py-2.5 text-center min-w-[52px] border-2 transition-all ${
+                  isCurrent
+                    ? isTop
+                      ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 scale-110'
+                      : 'bg-zinc-700 border-zinc-500 text-zinc-300 scale-110'
+                    : isTop
+                    ? isDom
+                      ? 'bg-emerald-500/8 border-emerald-500/30 text-emerald-400'
+                      : 'bg-blue-500/8 border-blue-500/30 text-blue-400'
+                    : 'bg-zinc-800 border-zinc-700 text-zinc-500'
+                }`}
+              >
+                <p className="text-xs font-mono font-bold">{h.hour}</p>
+                <p className="text-xs mt-0.5">{h.pct}%</p>
+                <p className="text-xs opacity-50">{h.count}t</p>
+              </div>
+            )
+          })}
         </div>
       </div>
 
-      {/* Input pullback — grande y táctil */}
+      {/* Input pullback */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
         <p className="text-sm font-semibold text-zinc-300 mb-1">¿Cuánto ha bajado desde el open?</p>
         <p className="text-xs text-zinc-500 mb-4">Puntos NQ de retroceso desde apertura</p>
-        <div className="flex items-center gap-3">
-          <input
-            type="number"
-            inputMode="decimal"
-            min={0}
-            placeholder="0"
-            value={pullback}
-            onChange={e => setPullback(e.target.value)}
-            className={`bg-zinc-800 border-2 rounded-xl px-4 py-4 text-4xl font-mono font-black text-center text-zinc-100 w-full focus:outline-none transition-colors ${
-              pullback
-                ? isDom ? 'border-emerald-500' : 'border-blue-500'
-                : 'border-zinc-700 focus:border-zinc-500'
-            }`}
-          />
-        </div>
+        <input
+          type="number"
+          inputMode="decimal"
+          min={0}
+          placeholder="0"
+          value={pullback}
+          onChange={e => setPullback(e.target.value)}
+          className={`bg-zinc-800 border-2 rounded-xl px-4 py-4 text-4xl font-mono font-black text-center text-zinc-100 w-full focus:outline-none transition-colors ${
+            pullback
+              ? isDom ? 'border-emerald-500' : 'border-blue-500'
+              : 'border-zinc-700 focus:border-zinc-500'
+          }`}
+        />
         {pullback && (
           <div className="flex items-center justify-between mt-3">
             <p className="text-xs text-zinc-500">
@@ -359,41 +399,92 @@ export default function EnVivoPage() {
         )}
       </div>
 
-      {/* Semáforo — el más grande y prominente */}
-      <div className={`rounded-2xl border-2 p-7 text-center ${ss.bg} ${ss.border}`}>
-        <p className={`text-5xl font-black tracking-tight ${ss.text}`}>{ss.label}</p>
-        <p className="text-sm text-zinc-400 mt-3 leading-relaxed">{ss.sub}</p>
-        <div className="flex justify-center gap-5 mt-5 text-xs text-zinc-500">
-          <span className="flex flex-col items-center gap-1">
-            <span className="text-base">{matched ? `${matched.winRate}%` : '—'}</span>
-            <span>pullback</span>
-          </span>
-          <span className="text-zinc-700">|</span>
-          <span className="flex flex-col items-center gap-1">
-            <span className="text-base">{inWindow ? '✓' : '✗'}</span>
-            <span>ventana</span>
-          </span>
-          <span className="text-zinc-700">|</span>
-          <span className="flex flex-col items-center gap-1">
-            <span className="text-base">{historicAvg !== null ? `${historicAvg >= 0 ? '+' : ''}${historicAvg}` : '—'}</span>
-            <span>mes histórico</span>
-          </span>
+      {/* Señal pullback */}
+      {matched && (
+        <div className={`rounded-2xl border-2 p-6 text-center ${
+          pullbackSignal === 'GO'      ? 'bg-emerald-500/10 border-emerald-500' :
+          pullbackSignal === 'GO_OOW'  ? 'bg-emerald-500/10 border-amber-400'  :
+          pullbackSignal === 'CAUTION' ? 'bg-amber-500/10   border-amber-500'  :
+                                         'bg-red-500/10     border-red-500'
+        }`}>
+          <p className={`text-4xl font-black ${
+            pullbackSignal === 'GO' || pullbackSignal === 'GO_OOW' ? 'text-emerald-400' :
+            pullbackSignal === 'CAUTION' ? 'text-amber-400' : 'text-red-400'
+          }`}>
+            {pullbackSignal === 'GO'      ? '🟢  GO'
+           : pullbackSignal === 'GO_OOW'  ? '🟢  GO  ⚠️'
+           : pullbackSignal === 'CAUTION' ? '🟡  ESPERA'
+           :                                '🔴  NO ENTRES'}
+          </p>
+          <p className="text-sm text-zinc-400 mt-3">
+            {pullbackSignal === 'GO'
+              ? 'Pullback fuerte + hora activa — setup óptimo, entra'
+              : pullbackSignal === 'GO_OOW'
+              ? 'Pullback favorable pero fuera de ventana — ok, sin agregar'
+              : pullbackSignal === 'CAUTION'
+              ? 'Condiciones mixtas — espera mejor setup o reduce tamaño'
+              : 'Probabilidad histórica en tu contra — salta este trade'
+            }
+          </p>
+          <div className="flex justify-center gap-5 mt-5 text-xs text-zinc-500">
+            <span className="flex flex-col items-center gap-1">
+              <span className="text-base font-black text-zinc-200">{matched.winRate}%</span>
+              <span>pullback WR</span>
+            </span>
+            <span className="text-zinc-700">|</span>
+            <span className="flex flex-col items-center gap-1">
+              <span className="text-base font-black text-zinc-200">{matched.avgPnl >= 0 ? '+' : ''}{matched.avgPnl}</span>
+              <span>avg pts</span>
+            </span>
+            <span className="text-zinc-700">|</span>
+            <span className="flex flex-col items-center gap-1">
+              <span className="text-base font-black text-zinc-200">{inWindow ? '✓' : '✗'}</span>
+              <span>hora ventana</span>
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3">
+          <p className="text-xs text-zinc-500 mb-1">WR {activeDay}</p>
+          <p className={`text-2xl font-black ${isDom ? 'text-emerald-400' : 'text-blue-400'}`}>{winRate}%</p>
+          <p className="text-xs text-zinc-600">{daySessions.length}t hist.</p>
+        </div>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3">
+          <p className="text-xs text-zinc-500 mb-1">Avg / sesión</p>
+          <p className={`text-2xl font-black ${avgPts >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            {avgPts >= 0 ? '+' : ''}{avgPts}
+          </p>
+          <p className="text-xs text-zinc-600">puntos</p>
+        </div>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3">
+          <p className="text-xs text-zinc-500 mb-1">Mes hist.</p>
+          <p className={`text-2xl font-black ${
+            historicAvg !== null ? (historicAvg >= 0 ? 'text-emerald-400' : 'text-red-400') : 'text-zinc-600'
+          }`}>
+            {historicAvg !== null ? `${historicAvg >= 0 ? '+' : ''}${historicAvg}` : '—'}
+          </p>
+          <p className="text-xs text-zinc-600">
+            {historicMonth.length > 0 ? `${historicMonth.length} años` : 'sin datos'}
+          </p>
         </div>
       </div>
 
-      {/* Tabla de referencia rápida */}
+      {/* Tabla pullback referencia */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
         <p className="text-xs font-semibold text-zinc-400 mb-3">
           Pullback → Probabilidad · {isDom ? 'Domingos' : 'Martes'}
         </p>
         <div className="space-y-2.5">
           {buckets.map(b => {
-            const active = matched?.label === b.label
+            const isActive = matched?.label === b.label
             return (
               <div
                 key={b.label}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
-                  active
+                  isActive
                     ? isDom ? 'bg-zinc-700 ring-2 ring-emerald-500' : 'bg-zinc-700 ring-2 ring-blue-500'
                     : ''
                 }`}
@@ -418,153 +509,127 @@ export default function EnVivoPage() {
         <p className="text-xs text-zinc-600 mt-3">⚠️ &gt;150 pts — probabilidad se invierte</p>
       </div>
 
-      {/* Contexto mes + base */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-          <p className="text-xs text-zinc-500 mb-2">📅 Este mes hist.</p>
-          {historicAvg !== null ? (
-            <>
-              <p className={`text-3xl font-black ${historicAvg >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                {historicAvg >= 0 ? '+' : ''}{historicAvg}
-              </p>
-              <p className="text-xs text-zinc-500 mt-1">avg pts · {historicMonth.length} años</p>
-              {thisMonthStat && (
-                <p className="text-xs text-zinc-400 mt-2">
-                  2026: {thisMonthStat.winRate}% · {thisMonthStat.trades} trades
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="text-zinc-600 text-sm mt-2">Sin historial</p>
-          )}
-        </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-          <p className="text-xs text-zinc-500 mb-2">📊 Base total</p>
-          <p className={`text-3xl font-black ${isDom ? 'text-emerald-400' : 'text-blue-400'}`}>{winRate}%</p>
-          <p className="text-xs text-zinc-500 mt-1">win rate</p>
-          <p className={`text-sm font-bold mt-2 ${avgPts >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-            {avgPts >= 0 ? '+' : ''}{avgPts} avg
-          </p>
-          <p className="text-xs text-zinc-500">{daySessions.length} sesiones</p>
-        </div>
-      </div>
+      {/* Log de decisión */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+        <p className="text-sm font-semibold text-zinc-300">📝 Registrar señal</p>
 
-      {/* ── Log de decisión ── */}
-      {matched && signal !== 'CAUTION' && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
-          <p className="text-sm font-semibold text-zinc-300">📝 Registrar esta señal</p>
-
-          {!pendingLogId && !logSaved && (
-            <>
-              <p className="text-xs text-zinc-500">¿Entraste al trade?</p>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={async () => {
-                    setSavingLog(true)
-                    const fechaHoy = now.toISOString().slice(0, 10)
-                    const res = await fetch('/api/signals', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        dia: activeDay, fecha: fechaHoy, hora: toHourLabel(now.getHours()),
-                        pullback_pts: pts, signal, en_ventana: inWindow, entro: true,
-                      }),
-                    })
-                    const d = await res.json()
-                    setPendingLogId(d.id)
-                    setLogEntro(true)
-                    setSavingLog(false)
-                  }}
-                  disabled={savingLog}
-                  className="py-3 rounded-xl bg-emerald-500/15 border border-emerald-500/50 text-emerald-400 font-bold text-sm active:bg-emerald-500/30"
-                >
-                  ✅ Sí, entré
-                </button>
-                <button
-                  onClick={async () => {
-                    setSavingLog(true)
-                    const fechaHoy = now.toISOString().slice(0, 10)
-                    await fetch('/api/signals', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        dia: activeDay, fecha: fechaHoy, hora: toHourLabel(now.getHours()),
-                        pullback_pts: pts, signal, en_ventana: inWindow, entro: false,
-                      }),
-                    })
-                    setLogSaved(true)
-                    setSavingLog(false)
-                  }}
-                  disabled={savingLog}
-                  className="py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-400 font-bold text-sm active:bg-zinc-700"
-                >
-                  ❌ No entré
-                </button>
-              </div>
-            </>
-          )}
-
-          {pendingLogId && !logSaved && (
-            <>
-              <p className="text-xs text-zinc-500">¿Cuántos puntos resultó? (llena después del trade)</p>
-              <div className="flex gap-3">
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  placeholder="+150 o -80"
-                  value={logOutcome}
-                  onChange={e => setLogOutcome(e.target.value)}
-                  className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-xl font-mono font-bold text-zinc-100 focus:outline-none focus:border-emerald-500"
-                />
-                <button
-                  onClick={async () => {
-                    if (!logOutcome) return
-                    setSavingLog(true)
-                    await fetch('/api/signals', {
-                      method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ id: pendingLogId, outcome_pts: parseFloat(logOutcome) }),
-                    })
-                    setLogSaved(true)
-                    setPendingLogId(null)
-                    setSavingLog(false)
-                  }}
-                  disabled={savingLog || !logOutcome}
-                  className="px-4 py-3 rounded-xl bg-emerald-500 text-white font-bold text-sm disabled:opacity-40"
-                >
-                  Guardar
-                </button>
-              </div>
-              <button onClick={() => setLogSaved(true)} className="text-xs text-zinc-600 hover:text-zinc-400">
-                Llenar después →
-              </button>
-            </>
-          )}
-
-          {logSaved && (
-            <div className="text-center py-2">
-              <p className="text-emerald-400 font-semibold">✓ Señal registrada</p>
+        {!pendingLogId && !logSaved && (
+          <>
+            <p className="text-xs text-zinc-500">¿Entraste al trade?</p>
+            <div className="grid grid-cols-2 gap-3">
               <button
-                onClick={() => { setLogSaved(false); setPendingLogId(null); setLogEntro(null); setLogOutcome('') }}
-                className="text-xs text-zinc-600 hover:text-zinc-400 mt-1"
+                onClick={async () => {
+                  setSavingLog(true)
+                  const res = await fetch('/api/signals', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      dia: activeDay,
+                      fecha: now.toISOString().slice(0, 10),
+                      hora: toHourLabel(now.getHours()),
+                      pullback_pts: isNaN(pts) ? 0 : pts,
+                      signal: pullbackSignal ?? 'CAUTION',
+                      en_ventana: inWindow,
+                      entro: true,
+                    }),
+                  })
+                  const d = await res.json()
+                  setPendingLogId(d.id)
+                  setSavingLog(false)
+                }}
+                disabled={savingLog}
+                className="py-3 rounded-xl bg-emerald-500/15 border border-emerald-500/50 text-emerald-400 font-bold text-sm active:bg-emerald-500/30"
               >
-                Registrar otra
+                ✅ Sí, entré
+              </button>
+              <button
+                onClick={async () => {
+                  setSavingLog(true)
+                  await fetch('/api/signals', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      dia: activeDay,
+                      fecha: now.toISOString().slice(0, 10),
+                      hora: toHourLabel(now.getHours()),
+                      pullback_pts: isNaN(pts) ? 0 : pts,
+                      signal: pullbackSignal ?? 'CAUTION',
+                      en_ventana: inWindow,
+                      entro: false,
+                    }),
+                  })
+                  setLogSaved(true)
+                  setSavingLog(false)
+                }}
+                disabled={savingLog}
+                className="py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-400 font-bold text-sm active:bg-zinc-700"
+              >
+                ❌ No entré
               </button>
             </div>
-          )}
-        </div>
-      )}
+          </>
+        )}
 
-      {/* ── Historial de señales ── */}
+        {pendingLogId && !logSaved && (
+          <>
+            <p className="text-xs text-zinc-500">¿Cuántos puntos resultó? (llena después del trade)</p>
+            <div className="flex gap-3">
+              <input
+                type="number"
+                inputMode="decimal"
+                placeholder="+150 o -80"
+                value={logOutcome}
+                onChange={e => setLogOutcome(e.target.value)}
+                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-xl font-mono font-bold text-zinc-100 focus:outline-none focus:border-emerald-500"
+              />
+              <button
+                onClick={async () => {
+                  if (!logOutcome) return
+                  setSavingLog(true)
+                  await fetch('/api/signals', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: pendingLogId, outcome_pts: parseFloat(logOutcome) }),
+                  })
+                  setLogSaved(true)
+                  setPendingLogId(null)
+                  setSavingLog(false)
+                }}
+                disabled={savingLog || !logOutcome}
+                className="px-4 py-3 rounded-xl bg-emerald-500 text-white font-bold text-sm disabled:opacity-40"
+              >
+                Guardar
+              </button>
+            </div>
+            <button onClick={() => setLogSaved(true)} className="text-xs text-zinc-600 hover:text-zinc-400">
+              Llenar después →
+            </button>
+          </>
+        )}
+
+        {logSaved && (
+          <div className="text-center py-2">
+            <p className="text-emerald-400 font-semibold">✓ Señal registrada</p>
+            <button
+              onClick={() => { setLogSaved(false); setPendingLogId(null); setLogOutcome('') }}
+              className="text-xs text-zinc-600 hover:text-zinc-400 mt-1"
+            >
+              Registrar otra
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Historial */}
       {signalLogs.length > 0 && (
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-          <p className="text-xs font-semibold text-zinc-400 mb-3">🗂 Últimas señales registradas</p>
+          <p className="text-xs font-semibold text-zinc-400 mb-3">🗂 Últimas señales</p>
           <div className="space-y-2">
-            {signalLogs.slice(0, 8).map(l => (
+            {signalLogs.slice(0, 6).map(l => (
               <div key={l.id} className="flex items-center gap-2 text-xs py-1.5 border-b border-zinc-800 last:border-0">
                 <span className="text-zinc-500 font-mono w-20 shrink-0">{l.fecha}</span>
-                <span className={`font-mono shrink-0 ${l.signal === 'GO' ? 'text-emerald-400' : l.signal === 'GO_OOW' ? 'text-amber-400' : 'text-red-400'}`}>
-                  {l.signal === 'GO' ? '🟢' : l.signal === 'GO_OOW' ? '🟢⚠️' : l.signal === 'NO' ? '🔴' : '🟡'}
+                <span className={`shrink-0 ${l.signal === 'GO' ? 'text-emerald-400' : l.signal === 'NO' ? 'text-red-400' : 'text-amber-400'}`}>
+                  {l.signal === 'GO' ? '🟢' : l.signal === 'NO' ? '🔴' : '🟡'}
                 </span>
                 <span className="text-zinc-400 shrink-0">{l.pullback_pts}pts</span>
                 <span className="text-zinc-600 shrink-0">{l.entro ? 'Entró' : 'No entró'}</span>
