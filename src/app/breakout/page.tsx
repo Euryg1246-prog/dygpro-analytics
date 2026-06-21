@@ -75,11 +75,19 @@ interface SignalLog {
 export default function BreakoutPage() {
   const [sessions, setSessions]     = useState<Session[]>([])
   const [loading, setLoading]       = useState(true)
-  const [activeDay, setActiveDay]   = useState<string>(() => {
+  const [activeDay, setActiveDayState] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('bk_activeDay')
+      if (saved && ['Lun','Mar','Mié','Jue','Vie'].includes(saved)) return saved
+    }
     const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
     const d = days[new Date().getDay()]
     return ['Lun', 'Mar', 'Mié', 'Jue', 'Vie'].includes(d) ? d : 'Lun'
   })
+  const setActiveDay = (d: string) => {
+    localStorage.setItem('bk_activeDay', d)
+    setActiveDayState(d)
+  }
   const [now, setNow]               = useState(new Date())
   const [signalLogs, setSignalLogs] = useState<SignalLog[]>([])
   const [logSaved, setLogSaved]     = useState(false)
