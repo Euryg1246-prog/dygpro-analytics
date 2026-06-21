@@ -55,6 +55,28 @@ export default function SesionesPage() {
     }
   }
 
+  const exportCSV = () => {
+    const cols = ['fecha','dia','strategy','open_price','baja','cierre','max_alta','hora_pico','hora_baja','min_pico','recuperacion','rec_pct','dev_max','mfe_mae','acumulado']
+    const header = cols.join(',')
+    const rows = filtered.map(s =>
+      cols.map(c => {
+        const v = s[c as keyof Session]
+        if (v === null || v === undefined) return ''
+        if (typeof v === 'string' && v.includes(',')) return `"${v}"`
+        return String(v)
+      }).join(',')
+    )
+    const csv = [header, ...rows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    const strat = filterStrategy === 'all' ? 'todas' : filterStrategy
+    a.href     = url
+    a.download = `dygpro_${strat}_${filtered.length}trades.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const columns: { key: SortKey; label: string; format?: (v: number | string | null) => string; color?: (v: number | null) => string }[] = [
     { key: 'fecha', label: 'Fecha' },
     { key: 'dia', label: 'Día' },
@@ -77,7 +99,15 @@ export default function SesionesPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Sesiones ({filtered.length})</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Sesiones ({filtered.length})</h1>
+        <button
+          onClick={exportCSV}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 text-sm font-medium hover:bg-zinc-700 transition-colors"
+        >
+          ⬇ Exportar CSV
+        </button>
+      </div>
 
       <div className="flex gap-4 flex-wrap items-end">
         <div>
