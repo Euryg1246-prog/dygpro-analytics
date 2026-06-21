@@ -35,6 +35,7 @@ export default function RootLayout({
             <Link href="/" className="font-bold text-base text-emerald-400 shrink-0">DYGPRO</Link>
             <div className="flex gap-1 text-xs overflow-x-auto scrollbar-none flex-1">
               <Link href="/" className="text-zinc-400 hover:text-white transition px-2 py-1 rounded-lg hover:bg-zinc-800 whitespace-nowrap">Dashboard</Link>
+              <Link href="/sizing" className="text-yellow-400 font-semibold transition px-2 py-1 rounded-lg bg-yellow-400/10 whitespace-nowrap">⚖️ Sizing</Link>
               <Link href="/domingo" className="text-emerald-400 font-semibold transition px-2 py-1 rounded-lg bg-emerald-500/10 whitespace-nowrap">⚡ SE Vivo</Link>
               <Link href="/breakout" className="text-blue-400 font-semibold transition px-2 py-1 rounded-lg bg-blue-500/10 whitespace-nowrap">⚡ BK Vivo</Link>
               <Link href="/sesiones" className="text-zinc-400 hover:text-white transition px-2 py-1 rounded-lg hover:bg-zinc-800 whitespace-nowrap">Sesiones</Link>
