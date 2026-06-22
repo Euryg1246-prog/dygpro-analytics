@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { LogoutButton } from "@/components/LogoutButton";
+import { AlertBadge } from "@/components/AlertBadge";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -41,9 +42,11 @@ export default function RootLayout({
               <Link href="/sesiones" className="text-zinc-400 hover:text-white transition px-2 py-1 rounded-lg hover:bg-zinc-800 whitespace-nowrap">Sesiones</Link>
               <Link href="/importar" className="text-zinc-400 hover:text-white transition px-2 py-1 rounded-lg hover:bg-zinc-800 whitespace-nowrap">Importar</Link>
               <Link href="/comparar" className="text-zinc-400 hover:text-white transition px-2 py-1 rounded-lg hover:bg-zinc-800 whitespace-nowrap">Comparar</Link>
+              <Link href="/alertas" className="text-zinc-400 hover:text-white transition px-2 py-1 rounded-lg hover:bg-zinc-800 whitespace-nowrap">Alertas</Link>
               <Link href="/webhook" className="text-zinc-400 hover:text-white transition px-2 py-1 rounded-lg hover:bg-zinc-800 whitespace-nowrap hidden md:block">Webhook</Link>
             </div>
-            <div className="shrink-0">
+            <div className="shrink-0 flex items-center gap-2">
+              <AlertBadge />
               <LogoutButton />
             </div>
           </div>
