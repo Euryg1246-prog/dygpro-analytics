@@ -54,7 +54,7 @@ function toHourLabel(h: number) {
 }
 
 const SESSION_START = 8 * 60
-const SESSION_END   = 20 * 60
+const SESSION_END   = 24 * 60 - 1
 
 const DAYS_LIST = [
   { key: 'Lun', label: 'Lunes'     },
@@ -64,7 +64,7 @@ const DAYS_LIST = [
   { key: 'Vie', label: 'Viernes'   },
 ]
 
-const SESSION_HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 18, 19]
+const SESSION_HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 
 interface SignalLog {
   id: string; dia: string; fecha: string; hora: string
@@ -153,7 +153,7 @@ export default function BreakoutPage() {
           <p className="text-5xl">⏳</p>
           <div>
             <p className="text-2xl font-black text-zinc-200">Sin sesión activa</p>
-            <p className="text-zinc-500 mt-1 text-sm">Breakout v4 · Lun–Vie 8:00 AM – 8:00 PM NY</p>
+            <p className="text-zinc-500 mt-1 text-sm">Breakout v4 · Lun–Vie 8:00 AM – 11:59 PM NY</p>
           </div>
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-10 py-6">
             <p className="text-5xl font-mono font-black text-emerald-400">
