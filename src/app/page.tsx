@@ -54,10 +54,19 @@ function CalendarHeatmap({ sessions }: { sessions: Session[] }) {
         {weeks.map((week, wi) => (
           <div key={wi} className="flex flex-col gap-1">
             {week.map((day, di) => (
-              <div key={di}
-                title={day ? `${day.date}: ${day.pnl !== null ? (day.pnl >= 0 ? '+' : '') + Math.round(day.pnl) : 'sin trade'}` : ''}
-                className={`w-3 h-3 rounded-sm ${day ? cellColor(day.pnl) : 'bg-transparent'}`}
-              />
+              <div key={di} className={`relative group w-3 h-3 rounded-sm ${day ? cellColor(day.pnl) : 'bg-transparent'}`}>
+                {day && (
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-50 pointer-events-none">
+                    <div className="bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-xs text-zinc-200 whitespace-nowrap shadow-lg">
+                      <span className="font-mono">{day.date}</span>
+                      {day.pnl !== null
+                        ? <span className={`ml-1 font-bold ${day.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{day.pnl >= 0 ? '+' : ''}{Math.round(day.pnl)} pts</span>
+                        : <span className="ml-1 text-zinc-500">sin trade</span>
+                      }
+                    </div>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         ))}
