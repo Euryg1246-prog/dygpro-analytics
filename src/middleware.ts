@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
 
-const PUBLIC = ['/login', '/api/webhook', '/api/auth']
+const PUBLIC = ['/login', '/api/webhook', '/api/alert', '/api/auth']
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl

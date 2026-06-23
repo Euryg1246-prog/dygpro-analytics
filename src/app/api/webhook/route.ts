@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  if (body.cierre === undefined && body.cierre === null) {
+  if (body.cierre === undefined || body.cierre === null) {
     return NextResponse.json({ error: 'Campo requerido: cierre' }, { status: 422 })
   }
 
